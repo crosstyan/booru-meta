@@ -4,7 +4,8 @@
             [typed.clojure :as t]
             [clj-http.client :as client]
             [progrock.core :as pr]
-            [cheshire.core :as json])
+            [cheshire.core :as json]
+            [clojure.string :as s])
   (:import (java.nio.file FileSystems)))
 
 ;; https://github.com/babashka/fs
@@ -38,10 +39,6 @@
         stem (string/lower-case stem)]
     (md5? stem)))
 
-
-(type "123")
-(md5? "ac12bf37522848b27ec31b532d313ea1")
-
 (defn cats-md5
   [files]
   (let [files-with-type (map (fn [path] {:file path :type (if (md5? path) :md5 :normal)}) files)]
@@ -49,9 +46,6 @@
               (assoc acc type (conj (get acc type) file)))
             {}
             files-with-type)))
-
-(def files (glob "/Volumes/Untitled 1/Grabber" (make-pattern exts)))
-(cats-md5 files)
 
 (def user-agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/94.0.4606.71 Safari/537.36")
 
@@ -78,8 +72,21 @@
   (get-metadata {:name :danbooru
                  :url "https://danbooru.donmai.us/posts.json"
                  :param {:tags (str "md5:" md5)}
-                 :preprocess (fn [content] (if (seq? content) nil (first content)))}))
+                 :preprocess (fn [content] 
+                               (let [original (if (seq? content) nil (first content))
+                                     split (fn [s] (if (and (= (type s) String) (not= s "")) (s/split s #"\s+") []))]
+                                 {:original original
+                                  :final {:id (:id original)
+                                          :rating (:rating original)
+                                          :md5 (:md5 original)
+                                          :general (split (:tag_string_general original))
+                                          :artist (split (:tag_string_artist original))
+                                          :copyright (split (:tag_string_copytright original))
+                                          :character (split (:tag_string_character original))
+                                          :meta (split (:tag_string_meta original))}}))}))
 
+;; (s/split "1girl apron bangs black_dress blood blood_on_clothes broom brown_eyes bucket carpet corpse dress from_above glass green_eyes hand_on_hip holding holding_broom indoors juliet_sleeves long_hair long_sleeves maid maid_apron pantyhose puffy_sleeves red_hair shoes smile standing waist_apron water white_legwear wooden_floor" #"\s+")
+;; (s/split "" #"\s+")
 ;; it's only return a json and next and prev
 ;; https://www.npmjs.com/package/sankaku-api?activeTab=explore
 ;; https://capi-v2.sankakucomplex.com/posts/keyset
@@ -87,18 +94,61 @@
   (get-metadata {:name :sankaku
                  :url "https://capi-v2.sankakucomplex.com/posts/keyset"
                  :param {:tags (str "md5:" md5)}
-                 :preprocess #(first (:data %))}))
+                 :preprocess (fn [content]
+                               (let [get-original #(first (:data %))
+                                     original (get-original content)
+                                     type-map {:0 :general
+                                               :1 :artist
+                                               :3 :copyright
+                                               :4 :character
+                                               :8 :medium ;; highres/white background
+                                               :9 :meta ;; tagme
+                                               }
+                                     type-cvt (fn [t] (get type-map (keyword (str t)) :other))
+                                     tags (map (fn [t] {:name (:tagName t) :type (type-cvt (:type t))})
+                                               (:tags original))
+                                     tags-list (reduce
+                                                (fn [acc {:keys [name type]}]
+                                                  (assoc acc type (conj (get acc type) name)))
+                                                {} tags)]
+                                 {:original original
+                                  :final (merge tags-list {:id (:id original)
+                                                           :rating (:rating original)
+                                                           :md5 (:md5 original)})}))}))
 
+;; (defn get-metadata-sankaku-by-id [id]
+;;   (get-metadata {:name :sankaku
+;;                  :url "https://capi-v2.sankakucomplex.com/posts/keyset"
+;;                  :param {:tags (str "id:" id)}
+;;                  :preprocess #(first (:data %))}))
+;; (get-metadata-sankaku-by-id "32643440")
 ;; why the tags is placed at outside?
 (defn get-metadata-yandere [md5]
   (get-metadata {:name :yandere
                  :url "https://yande.re/post.json"
                  :param {:api_version 2 :tags (str "md5:" md5) :include_tags 1}
-                 :preprocess (fn [content] (let [post (first (:posts content))
-                                                 tags (:tags content)]
-                                             (if (some? post) (assoc post :tags tags) nil)))}))
+                 :preprocess (fn [content]
+                               (let [get-original
+                                     (fn [content] (let [post (first (:posts content))
+                                                         tags (:tags content)]
+                                                     (if (some? post) (assoc post :tags tags) nil)))
+                                     get-type (fn [tags type] (for [[tag t] tags :when (= t type)] tag))
+                                     original (get-original content)
+                                     ;; we only get one image if we specify md5, so the tags must belong to the image we retrieve
+                                     get-final (fn [original] {:rating (:rating original)
+                                                               :artist (get-type (:tags original) "artist")
+                                                               :copyright (get-type (:tags original) "copyright")
+                                                               :character (get-type (:tags original) "character")
+                                                               :group (get-type (:tags original) "circle")
+                                                               :general (get-type (:tags original) "general")
+                                                               :md5 (:md5 original)
+                                                               :id (:id original)})]
+                                 (if (some? original) {:original original :final (get-final original)} nil)))}))
 
 
-(get-metadata-yandere "20aeb65cd6241b2007f415bfe09afb2e")
+(def files (glob "/Volumes/Untitled 1/Grabber" (make-pattern exts)))
+(cats-md5 files)
+
+(get-metadata-yandere "b0c35b7124b721319911ebc1d03b85e4")
 (get-metadata-sankaku "f6f3fc979c1609372e491d101ba51f09")
 (get-metadata-danbooru "f6f3fc979c1609372e491d101ba51f09")
