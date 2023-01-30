@@ -1,0 +1,1 @@
+["^ ","~$anns",["^ ","~:row",12,"~:col",1,"~:macro",true,"~:varargs-min-arity",0,"~:name","^0","~:ns","~$typed.ann-macros.clojure","~:top-ns","^7"],"~$ann-protocols",["^ ","^1",22,"^2",1,"^3",true,"^4",0,"^5","^9","^6","^7","^8","^7"],"~:filename","/Users/crosstyan/.m2/repository/org/typedclojure/typed.lib.clojure/1.0.32/typed.lib.clojure-1.0.32.jar:typed/ann_macros/clojure.clj"]

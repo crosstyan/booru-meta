@@ -1,0 +1,1 @@
+["^ ","~$ignore-with-unchecked-cast",["^ ","~:row",11,"~:col",1,"~:macro",true,"~:fixed-arities",["~#set",[2]],"~:name","^0","~:ns","~$clojure.core.typed.unsafe","~:top-ns","^8"],"~:filename","/Users/crosstyan/.m2/repository/org/typedclojure/typed.clj.runtime/1.0.32/typed.clj.runtime-1.0.32.jar:clojure/core/typed/unsafe.clj"]
