@@ -112,8 +112,8 @@
                                                :8 :medium ;; highres/white background
                                                :9 :meta ;; tagme
                                                }
-                                     type-cvt (fn [t] (get type-map (keyword (str t)) :other))
-                                     tags (map (fn [t] {:name (:tagName t) :type (type-cvt (:type t))})
+                                     type-cvt #(get type-map (keyword (str %)) :other)
+                                     tags (map #(do {:name (:tagName %) :type (type-cvt (:type %))})
                                                (:tags original))
                                      tags-list (reduce
                                                 (fn [acc {:keys [name type]}]
@@ -225,15 +225,14 @@
 (defn split-kv-string [s]
   (try
     (reduce
-     (fn [m [k v]] (assoc m k v))
-     {}
+     (fn [m [k v]] (assoc m k v)) {}
      (map #(let [[k v] (s/split % #":")
                  k ((comp keyword s/lower-case s/trim) k)
                  v (s/trim v)]
              [k v])
-          ;; split by capturing any string that starts with a capital letter,
-          ;; followed by a colon, followed by any string that doesn't start with a
-          ;; capital letter
+            ;; split by capturing any string that starts with a capital letter,
+            ;; followed by a colon, followed by any string that doesn't start with a
+            ;; capital letter
           (re-seq #"[A-Z][^:]*:\s*[^[A-Z]]*" s)))
     (catch Exception _e {})))
 
@@ -248,11 +247,11 @@
                            m {:link (get-in e [:attrs :href])}]
                        (assoc m :meta (split-kv-string alt))))
         percentage-to-num (fn [p] (float (/ (Integer/parseInt (re-find #"[0-9]+" p)) 100)))
-        sims (map (comp (fn [p] {:sim p})
+        sims (map (comp #(do {:sim %})
                         percentage-to-num
                         #(re-find #"[0-9]+\%" %) first
                         #(get % :content) first
-                        (fn [e] (hs/select (hs/find-in-text #"similarity") e))) tbodies)
+                        (fn [el] (hs/select (hs/find-in-text #"similarity") el))) tbodies)
         links (map (comp
                     (fn [m] (assoc m :link (if (s/starts-with? (:link m) "//") ;; add "https:" to the link
                                              (str "https:" (:link m)) (:link m))))
@@ -302,7 +301,7 @@
                        (client/get new-url {:async true :as :auto :headers {"User-Agent" user-agent}}
                                    (fn [response]
                                      (let [data (extract-ascii2d-info (:body response))]
-                                       (if (some? data) (deliver ret {:data data :source source}) 
+                                       (if (some? data) (deliver ret {:data data :source source})
                                            (deliver ret {:error :no-match :source source}))))
                                    (fn [error] (deliver ret {:error error :source source})))
                        (deliver ret {:error :no-match :source source}))))
