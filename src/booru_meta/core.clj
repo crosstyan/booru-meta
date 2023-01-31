@@ -5,7 +5,10 @@
             [clj-http.client :as client]
             [progrock.core :as pr]
             [cheshire.core :as json]
-            [clojure.string :as s])
+            [clojure.string :as s]
+            [hickory.select :as hs]
+            [mikera.image.core :as imagez]
+            [hickory.core :as html])
   (:import (java.nio.file FileSystems)))
 
 ;; https://github.com/babashka/fs
@@ -44,12 +47,10 @@
   (let [files-with-type (map (fn [path] {:file path :type (if (md5? path) :md5 :normal)}) files)]
     (reduce (fn [acc {:keys [file type]}]
               (assoc acc type (conj (get acc type) file)))
-            {}
-            files-with-type)))
+            {} files-with-type)))
 
 (def user-agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/94.0.4606.71 Safari/537.36")
 
-;; sync
 ;; https://github.com/dakrone/clj-http#basic-auth
 ;; https://danbooru.donmai.us/wiki_pages/help:api
 ;; %3A = ":"
@@ -65,12 +66,12 @@
         param (:param options)
         source (:name options)
         ret (promise)]
-    (do (client/get url {:headers header :content-type :json :as :json :query-params param :async true}
-                    (fn [res] (let [processed (preprocess (:body res))
-                                    wrapped (if (some? processed) {:data processed :source source} nil)]
-                                (deliver ret wrapped)))
-                    (fn [_err] (deliver ret nil)))
-        ret)))
+    (client/get url {:headers header :content-type :json :as :json :query-params param :async true}
+                (fn [res] (let [processed (preprocess (:body res))
+                                wrapped (if (some? processed) {:data processed :source source :error nil} {:data nil :source source :error :empty})]
+                            (deliver ret wrapped)))
+                (fn [err] (deliver ret {:data nil :source source :error err})))
+    ret))
 
 (defn get-metadata-danbooru [md5]
   (get-metadata {:name :danbooru
@@ -95,8 +96,6 @@
 ;; https://github.com/rainyDayDevs/pygelbooru/blob/c0b443aa1fa11e85a43968968ebf244a1bf5c55c/pygelbooru/gelbooru.py#L143
 ;; TODO: Gelbooru support
 
-;; (s/split "1girl apron bangs black_dress blood blood_on_clothes broom brown_eyes bucket carpet corpse dress from_above glass green_eyes hand_on_hip holding holding_broom indoors juliet_sleeves long_hair long_sleeves maid maid_apron pantyhose puffy_sleeves red_hair shoes smile standing waist_apron water white_legwear wooden_floor" #"\s+")
-;; (s/split "" #"\s+")
 ;; it's only return a json and next and prev
 ;; https://www.npmjs.com/package/sankaku-api?activeTab=explore
 ;; https://capi-v2.sankakucomplex.com/posts/keyset
@@ -163,3 +162,115 @@
 (get-metadata-yandere "b0c35b7124b721319911ebc1d03b85e4")
 (get-metadata-sankaku "f6f3fc979c1609372e491d101ba51f09")
 @(get-metadata-danbooru "f6f3fc979c1609372e491d101ba51f09")
+
+
+
+(defn get-new-size
+  ([old-size] (get-new-size old-size {}))
+  ([old-size options]
+   (let [[old-w old-h] old-size
+         new-l (get options :new-length 512)
+         preserve-long? (get options :preserve-long? true)]
+     (if (or (< old-w new-l) (< old-h new-l))
+       old-size
+       (if preserve-long?
+         (if (> old-w old-h)
+           (let [new-h new-l
+                 new-w (int (* new-l (/ old-w old-h)))]
+             [new-w new-h])
+           (let [new-w new-l
+                 new-h (int (* new-l (/ old-h old-w)))]
+             [new-w new-h]))
+         (if (> old-w old-h)
+           (let [new-w new-l
+                 new-h (int (* new-l (/ old-h old-w)))]
+             [new-w new-h])
+           (let [new-h new-l
+                 new-w (int (* new-l (/ old-w old-h)))]
+             [new-w new-h])))))))
+
+;; java.io.File :-> java.io.OutputStream
+;; https://guava.dev/releases/19.0/api/docs/com/google/common/io/FileBackedOutputStream.html
+(defn read-compress-img [file]
+  (let [image (imagez/load-image (str file))
+        w (imagez/width image)
+        h (imagez/height image)
+        [w' h'] (get-new-size [w h] {:preserve-long? false})
+        new-image (imagez/resize image w' h')
+        buf (new java.io.ByteArrayOutputStream)
+        _writer (imagez/write new-image buf "png" {:quality 0.8})
+        bytes (.toByteArray buf)]
+    (.close buf)
+    bytes))
+
+;; https://github.com/kitUIN/PicImageSearch/blob/3c7f13cab5d49d38f6236f8f26f54a2e64d06175/PicImageSearch/saucenao.py#L27
+(defn get-sauce [file options]
+  (let [body (read-compress-img file)
+        api-key (:api-key options)
+        ret (promise)
+        url "https://saucenao.com/search.php"
+        params {:output_type 2
+                :api_key api-key
+                :minsim 60
+                :testmode 0}]
+    (client/post url {:async true :multipart [{:name "file" :content body}] :query-params params :as :json}
+                 (fn [response]
+                   (deliver ret {:data (:body response)}))
+                 (fn [error] (deliver ret {:error error})))
+    ret))
+
+
+;; iqdb will return a html page. Need to parse it.
+;; You can't match a list. Have to use map or first.
+(defn extract-iqdb-info [iqdb-raw-html-string]
+  (let [h (html/as-hickory (html/parse iqdb-raw-html-string))
+        nomatch (hs/select (hs/child (hs/class "nomatch")) h)
+        ;; leave the final item out. It's just a checkbox
+        tbodies (drop-last (hs/select (hs/child (hs/and (hs/tag :tbody) (hs/has-descendant (hs/tag :a)))) h))
+        ex-from-a (fn [e] {:link (get-in e [:attrs :href])
+                           :alt  (get-in (first (:content e)) [:attrs :alt])})
+        sims (map (comp (fn [p] {:sim p})
+                        #(re-find #"[0-9]{2}\%" %)
+                        first
+                        #(get % :content)
+                        first
+                        (fn [e] (hs/select (hs/find-in-text #"similarity") e))) tbodies)
+        links (map (comp ex-from-a
+                         first
+                         (fn [e] (hs/select (hs/descendant (hs/tag :a)) e))) tbodies)]
+    (if (seq nomatch) nil (map #(merge %1 %2) sims links))))
+
+(defn get-iqdb [file options]
+  (let [body (read-compress-img file)
+        three-d? (if (some? (:3d? options)) (:3d? options) false)
+        url (if three-d? "https://3d.iqdb.org/" "https://iqdb.org/")
+        ret (promise)]
+    (client/post url {:async true :multipart [{:name "file" :content body}] :as :auto :headers {"User-Agent" user-agent}}
+                 (fn [response]
+                   (let [data (extract-iqdb-info (:body response))]
+                     (deliver ret (if (some? data) {:data data} {:error :no-match}))))
+                 (fn [error] (deliver ret {:error error})))
+    ret))
+
+;; https://stackoverflow.com/questions/44182400/how-to-convert-bufferedimage-rgba-to-bufferedimage-rgb
+;; can only use png before convert to rgb
+;; https://github.com/mikera/imagez/issues/33
+;; (def img-s
+;; (let [empty-image (imagez/new-image 512 512)
+;;       ;; rgb (imagez/ensure-default-image-type )
+;;       buf (new java.io.ByteArrayOutputStream)
+;;       _writer (imagez/write empty-image buf "png" {:quality 0.8})
+;;       bytes (.toByteArray buf)]
+;;   (.close buf)
+;;   bytes))
+
+;; pay attention to short_remaining and long_remaining
+;; if short_remaining is 0, wait for 30 seconds
+@(get-sauce (io/file "/Volumes/Untitled 1/Grabber/maachi/90375559_p0 - 無題.jpg") {:api-key "009934e06a88a3a1f28c565d69a5273ee47008e1"})
+
+;; https://github.com/clj-commons/hickory
+@(get-iqdb (io/file "/Volumes/Untitled 1/Grabber/kazuharu_kina/33767cc3b60dcebb3733854dd03b7da5.jpg") {:3d? false})
+
+(imagez/load-image (str (io/file "/Volumes/Untitled 1/Grabber/maachi/90375559_p0 - 無題.jpg")))
+
+
