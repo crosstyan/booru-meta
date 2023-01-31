@@ -1,6 +1,5 @@
 (ns booru-meta.core
   (:require [clojure.java.io :as io]
-            [clojure.string :as string]
             [typed.clojure :as t]
             [clj-http.client :as client]
             [progrock.core :as pr]
@@ -13,7 +12,7 @@
 
 ;; https://github.com/babashka/fs
 ;; https://stackoverflow.com/questions/5019978/what-is-the-most-concise-clojure-equivalent-for-rubys-dir-glob
-(def exts ["jpg" "jpeg" "png" "webp" "gif" "webm"])
+(def exts ["jpg" "jpeg" "png" "webp"])
 
 ;; okay you have to use two stars (idk why)
 (defn glob [path pattern]
@@ -259,7 +258,6 @@
                  (fn [error] (deliver ret {:error error :source source})))
     ret))
 
-;; TODO: ASCII2D
 (defn extract-ascii2d-info [raw-html-string]
   (let [hp (html/as-hickory (html/parse raw-html-string))
         get-pair (fn [[work author]]
@@ -296,9 +294,6 @@
     ret))
 
 ;; (s/replace-first  "https://ascii2d.obfs.dev/search/color/f91eb5bcdde40c12fceecbcf6d1602a1" #"\/color\/" "/bovw/")
-
-(def uri (java.net.URI/create "https://ascii2d.obfs.dev/"))
-(str (.resolve uri "file"))
 
 ;; pay attention to short_remaining and long_remaining
 ;; if short_remaining is 0, wait for 30 seconds
