@@ -163,14 +163,12 @@
 (get-metadata-sankaku "f6f3fc979c1609372e491d101ba51f09")
 @(get-metadata-danbooru "f6f3fc979c1609372e491d101ba51f09")
 
-
-
 (defn get-new-size
   ([old-size] (get-new-size old-size {}))
   ([old-size options]
    (let [[old-w old-h] old-size
          new-l (get options :new-length 512)
-         preserve-long? (get options :preserve-long? true)]
+         preserve-long? (get options :preserve-long true)]
      (if (or (< old-w new-l) (< old-h new-l))
        old-size
        (if preserve-long?
@@ -189,13 +187,16 @@
                  new-w (int (* new-l (/ old-w old-h)))]
              [new-w new-h])))))))
 
-;; java.io.File :-> java.io.OutputStream
+;; java.io.File :-> ByteArray
 ;; https://guava.dev/releases/19.0/api/docs/com/google/common/io/FileBackedOutputStream.html
+;; https://stackoverflow.com/questions/44182400/how-to-convert-bufferedimage-rgba-to-bufferedimage-rgb
+;; can only use png before convert to rgb
+;; https://github.com/mikera/imagez/issues/33
 (defn read-compress-img [file]
   (let [image (imagez/load-image (str file))
         w (imagez/width image)
         h (imagez/height image)
-        [w' h'] (get-new-size [w h] {:preserve-long? false})
+        [w' h'] (get-new-size [w h] {:preserve-long false})
         new-image (imagez/resize image w' h')
         buf (new java.io.ByteArrayOutputStream)
         _writer (imagez/write new-image buf "png" {:quality 0.8})
@@ -209,14 +210,17 @@
         api-key (:api-key options)
         ret (promise)
         url "https://saucenao.com/search.php"
+        source :saucenao
         params {:output_type 2
                 :api_key api-key
                 :minsim 60
                 :testmode 0}]
-    (client/post url {:async true :multipart [{:name "file" :content body}] :query-params params :as :json}
-                 (fn [response]
-                   (deliver ret {:data (:body response)}))
-                 (fn [error] (deliver ret {:error error})))
+    (if (some? api-key)
+      (client/post url {:async true :multipart [{:name "file" :content body}] :query-params params :as :json}
+                   (fn [response]
+                     (deliver ret {:data (:body response) :source source}))
+                   (fn [error] (deliver ret {:error error :source source})))
+      (deliver ret {:error :no-api-key}))
     ret))
 
 
@@ -227,42 +231,74 @@
         nomatch (hs/select (hs/child (hs/class "nomatch")) h)
         ;; leave the final item out. It's just a checkbox
         tbodies (drop-last (hs/select (hs/child (hs/and (hs/tag :tbody) (hs/has-descendant (hs/tag :a)))) h))
-        ex-from-a (fn [e] {:link (get-in e [:attrs :href])
-                           :alt  (get-in (first (:content e)) [:attrs :alt])})
+        ex-a (fn [e] {:link (get-in e [:attrs :href])
+                      :alt  (get-in (first (:content e)) [:attrs :alt])})
+        percentage-to-num (fn [p] (float (/ (Integer/parseInt (re-find #"[0-9]+" p)) 100)))
         sims (map (comp (fn [p] {:sim p})
-                        #(re-find #"[0-9]{2}\%" %)
-                        first
-                        #(get % :content)
-                        first
+                        percentage-to-num
+                        #(re-find #"[0-9]+\%" %) first
+                        #(get % :content) first
                         (fn [e] (hs/select (hs/find-in-text #"similarity") e))) tbodies)
-        links (map (comp ex-from-a
-                         first
-                         (fn [e] (hs/select (hs/descendant (hs/tag :a)) e))) tbodies)]
+        links (map (comp
+                    (fn [m] (assoc m :link (if (s/starts-with? (:link m) "//") ;; add "https:" to the link
+                                             (str "https:" (:link m)) (:link m))))
+                    ex-a first
+                    (fn [e] (hs/select (hs/descendant (hs/tag :a)) e))) tbodies)]
     (if (seq nomatch) nil (map #(merge %1 %2) sims links))))
 
 (defn get-iqdb [file options]
   (let [body (read-compress-img file)
         three-d? (if (some? (:3d? options)) (:3d? options) false)
         url (if three-d? "https://3d.iqdb.org/" "https://iqdb.org/")
+        source :iqdb
         ret (promise)]
     (client/post url {:async true :multipart [{:name "file" :content body}] :as :auto :headers {"User-Agent" user-agent}}
                  (fn [response]
                    (let [data (extract-iqdb-info (:body response))]
-                     (deliver ret (if (some? data) {:data data} {:error :no-match}))))
-                 (fn [error] (deliver ret {:error error})))
+                     (deliver ret (if (some? data) {:data data :source source} {:error :no-match}))))
+                 (fn [error] (deliver ret {:error error :source source})))
     ret))
 
-;; https://stackoverflow.com/questions/44182400/how-to-convert-bufferedimage-rgba-to-bufferedimage-rgb
-;; can only use png before convert to rgb
-;; https://github.com/mikera/imagez/issues/33
-;; (def img-s
-;; (let [empty-image (imagez/new-image 512 512)
-;;       ;; rgb (imagez/ensure-default-image-type )
-;;       buf (new java.io.ByteArrayOutputStream)
-;;       _writer (imagez/write empty-image buf "png" {:quality 0.8})
-;;       bytes (.toByteArray buf)]
-;;   (.close buf)
-;;   bytes))
+;; TODO: ASCII2D
+(defn extract-ascii2d-info [raw-html-string]
+  (let [hp (html/as-hickory (html/parse raw-html-string))
+        get-pair (fn [[work author]]
+                   {:work {:name (first (:content work))
+                           :link (get-in work [:attrs :href])}
+                    :author {:name (first (:content author))
+                             :link (get-in author [:attrs :href])}})]
+    (map get-pair
+         (filter #(= (count %) 2)
+                 (map (comp #(hs/select (hs/descendant (hs/tag :a)) %) first
+                            #(hs/select (hs/descendant (hs/class "detail-box")) %))
+                      (hs/select (hs/child (hs/class "item-box")) hp))))))
+
+(defn get-ascii2d [file options]
+  (let [body (read-compress-img file)
+        url "https://ascii2d.obfs.dev/"
+        append-url (fn [url path] (let [uri (java.net.URI/create url)]
+                                    (str (.resolve uri path))))
+        is-bovw (if (some? (:bovw? options)) (:bovw? options) false)
+        source :ascii2d
+        ret (promise)]
+    (client/post (append-url url "/search/file") {:async true :multipart [{:name "file" :content body}] :as :auto :headers {"User-Agent" user-agent}}
+                 (fn [response]
+                   (let [new-url (get-in response [:headers "Location"])
+                         new-url (if is-bovw (s/replace-first new-url #"\/color\/" "/bovw/") new-url)]
+                     (if (some? new-url)
+                       (client/get new-url {:async true :as :auto :headers {"User-Agent" user-agent}}
+                                   (fn [response]
+                                     (let [data (extract-ascii2d-info (:body response))]
+                                       (if (some? data) (deliver ret {:data data :source source}) (deliver ret {:error :no-match}))))
+                                   (fn [error] (deliver ret {:error error :source source})))
+                       (deliver ret {:error :no-match}))))
+                 (fn [error] (deliver ret {:error error :source source})))
+    ret))
+
+;; (s/replace-first  "https://ascii2d.obfs.dev/search/color/f91eb5bcdde40c12fceecbcf6d1602a1" #"\/color\/" "/bovw/")
+
+(def uri (java.net.URI/create "https://ascii2d.obfs.dev/"))
+(str (.resolve uri "file"))
 
 ;; pay attention to short_remaining and long_remaining
 ;; if short_remaining is 0, wait for 30 seconds
@@ -270,7 +306,4 @@
 
 ;; https://github.com/clj-commons/hickory
 @(get-iqdb (io/file "/Volumes/Untitled 1/Grabber/kazuharu_kina/33767cc3b60dcebb3733854dd03b7da5.jpg") {:3d? false})
-
-(imagez/load-image (str (io/file "/Volumes/Untitled 1/Grabber/maachi/90375559_p0 - 無題.jpg")))
-
-
+@(get-ascii2d (io/file "/Volumes/Untitled 1/Grabber/kazuharu_kina/33767cc3b60dcebb3733854dd03b7da5.jpg") {})
