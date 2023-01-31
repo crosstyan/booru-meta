@@ -10,6 +10,10 @@
                  [clj-http "3.12.3"]
                  [progrock "0.1.2"]
                  [org.clojure/data.json "2.4.0"]
-                 [cheshire "5.11.0"]]
+                 [cheshire "5.11.0"]
+                 [net.mikera/imagez "0.12.0"]
+                 [com.luposlip/nd-db "0.7.2"]
+                 [techascent/tech.ml.dataset "7.000-beta-25"]
+                 [org.clojure/core.async "1.6.673"]]
   :profiles {:dev {:dependencies [[org.typedclojure/typed.clj.checker "1.0.32"]]}}
   :repl-options {:init-ns booru-meta.core})

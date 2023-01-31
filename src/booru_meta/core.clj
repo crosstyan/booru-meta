@@ -85,6 +85,12 @@
                                           :character (split (:tag_string_character original))
                                           :meta (split (:tag_string_meta original))}}))}))
 
+;; https://gelbooru.com/index.php?page=wiki&s=view&id=18780
+;; Have to use General csv/h5 database to get the metadata of tags. 
+;; https://github.com/slpkbt/gelbooru-api/blob/37353af533946062dcb9cb0bacd2c984e5471991/index.js#L62
+;; https://github.com/rainyDayDevs/pygelbooru/blob/c0b443aa1fa11e85a43968968ebf244a1bf5c55c/pygelbooru/gelbooru.py#L143
+;; TODO: Gelbooru support
+
 ;; (s/split "1girl apron bangs black_dress blood blood_on_clothes broom brown_eyes bucket carpet corpse dress from_above glass green_eyes hand_on_hip holding holding_broom indoors juliet_sleeves long_hair long_sleeves maid maid_apron pantyhose puffy_sleeves red_hair shoes smile standing waist_apron water white_legwear wooden_floor" #"\s+")
 ;; (s/split "" #"\s+")
 ;; it's only return a json and next and prev
@@ -122,6 +128,7 @@
 ;;                  :param {:tags (str "id:" id)}
 ;;                  :preprocess #(first (:data %))}))
 ;; (get-metadata-sankaku-by-id "32643440")
+
 ;; why the tags is placed at outside?
 (defn get-metadata-yandere [md5]
   (get-metadata {:name :yandere
