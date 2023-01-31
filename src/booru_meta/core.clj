@@ -27,7 +27,7 @@
 
 (defn make-pattern [exts]
   (str "**.{"
-       (string/join "," exts)
+       (s/join "," exts)
        "}"))
 
 (defmulti md5? type)
@@ -292,8 +292,6 @@
                        (deliver ret {:error :no-match}))))
                  (fn [error] (deliver ret {:error error :source source})))
     ret))
-
-;; (s/replace-first  "https://ascii2d.obfs.dev/search/color/f91eb5bcdde40c12fceecbcf6d1602a1" #"\/color\/" "/bovw/")
 
 ;; pay attention to short_remaining and long_remaining
 ;; if short_remaining is 0, wait for 30 seconds
