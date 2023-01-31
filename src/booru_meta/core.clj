@@ -222,6 +222,20 @@
       (deliver ret {:error :no-api-key}))
     ret))
 
+(defn split-kv-string [s]
+  (try
+    (reduce
+     (fn [m [k v]] (assoc m k v))
+     {}
+     (map #(let [[k v] (s/split % #":")
+                 k ((comp keyword s/lower-case s/trim) k)
+                 v (s/trim v)]
+             [k v])
+          ;; split by capturing any string that starts with a capital letter,
+          ;; followed by a colon, followed by any string that doesn't start with a
+          ;; capital letter
+          (re-seq #"[A-Z][^:]*:\s*[^[A-Z]]*" s)))
+    (catch Exception _e {})))
 
 ;; iqdb will return a html page. Need to parse it.
 ;; You can't match a list. Have to use map or first.
@@ -230,8 +244,9 @@
         nomatch (hs/select (hs/child (hs/class "nomatch")) h)
         ;; leave the final item out. It's just a checkbox
         tbodies (drop-last (hs/select (hs/child (hs/and (hs/tag :tbody) (hs/has-descendant (hs/tag :a)))) h))
-        ex-a (fn [e] {:link (get-in e [:attrs :href])
-                      :alt  (get-in (first (:content e)) [:attrs :alt])})
+        ex-a (fn [e] (let [alt (get-in (first (:content e)) [:attrs :alt])
+                           m {:link (get-in e [:attrs :href])}]
+                       (assoc m :meta (split-kv-string alt))))
         percentage-to-num (fn [p] (float (/ (Integer/parseInt (re-find #"[0-9]+" p)) 100)))
         sims (map (comp (fn [p] {:sim p})
                         percentage-to-num
@@ -300,3 +315,8 @@
 ;; https://github.com/clj-commons/hickory
 @(get-iqdb (io/file "/Volumes/Untitled 1/Grabber/kazuharu_kina/33767cc3b60dcebb3733854dd03b7da5.jpg") {:3d? false})
 @(get-ascii2d (io/file "/Volumes/Untitled 1/Grabber/kazuharu_kina/33767cc3b60dcebb3733854dd03b7da5.jpg") {})
+
+;; (re-find #"[A-Z][^:]*:\s*[^[A-Z]]*" "Rating: g Score: 2 Tags: 1girl backpack bag blue_bow blue_skirt bow brown_bag brown_footwear brown_hair closed_eyes collarbone eyebrows_visible_through_hair green_background hair_ribbon highres kazuharu_kina open_mouth original ponytail ribbon school_uniform serafuku simple_background skirt sleeveless smile solo teeth tongue uniform upper_teeth yellow_ribbon")
+
+;; (let [[k v] (s/split  "Rating: safe" #":")]
+;;   (print k v))
