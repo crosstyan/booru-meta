@@ -38,7 +38,7 @@
     (some? (re-find #"^[0-9a-f]+$" s))))
 (defmethod md5? java.io.File [file]
   (let [stem (com.google.common.io.Files/getNameWithoutExtension (str file))
-        stem (string/lower-case stem)]
+        stem (s/lower-case stem)]
     (md5? stem)))
 
 (defn cats-md5
