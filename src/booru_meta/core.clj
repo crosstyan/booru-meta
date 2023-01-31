@@ -63,16 +63,20 @@
         header {"User-Agent" user-agent}
         preprocess (:preprocess options)
         param (:param options)
-        source (:name options)]
-    (let [content (:body (client/get url {:headers header :content-type :json :as :json :query-params param}))
-          processed (preprocess content)]
-      (if (some? processed) {:data processed :source source} nil))))
+        source (:name options)
+        ret (promise)]
+    (do (client/get url {:headers header :content-type :json :as :json :query-params param :async true}
+                    (fn [res] (let [processed (preprocess (:body res))
+                                    wrapped (if (some? processed) {:data processed :source source} nil)]
+                                (deliver ret wrapped)))
+                    (fn [_err] (deliver ret nil)))
+        ret)))
 
 (defn get-metadata-danbooru [md5]
   (get-metadata {:name :danbooru
                  :url "https://danbooru.donmai.us/posts.json"
                  :param {:tags (str "md5:" md5)}
-                 :preprocess (fn [content] 
+                 :preprocess (fn [content]
                                (let [original (if (seq? content) nil (first content))
                                      split (fn [s] (if (and (= (type s) String) (not= s "")) (s/split s #"\s+") []))]
                                  {:original original
@@ -158,4 +162,4 @@
 
 (get-metadata-yandere "b0c35b7124b721319911ebc1d03b85e4")
 (get-metadata-sankaku "f6f3fc979c1609372e491d101ba51f09")
-(get-metadata-danbooru "f6f3fc979c1609372e491d101ba51f09")
+@(get-metadata-danbooru "f6f3fc979c1609372e491d101ba51f09")
