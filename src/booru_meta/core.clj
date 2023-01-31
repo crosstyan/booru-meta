@@ -302,9 +302,10 @@
                        (client/get new-url {:async true :as :auto :headers {"User-Agent" user-agent}}
                                    (fn [response]
                                      (let [data (extract-ascii2d-info (:body response))]
-                                       (if (some? data) (deliver ret {:data data :source source}) (deliver ret {:error :no-match}))))
+                                       (if (some? data) (deliver ret {:data data :source source}) 
+                                           (deliver ret {:error :no-match :source source}))))
                                    (fn [error] (deliver ret {:error error :source source})))
-                       (deliver ret {:error :no-match}))))
+                       (deliver ret {:error :no-match :source source}))))
                  (fn [error] (deliver ret {:error error :source source})))
     ret))
 
