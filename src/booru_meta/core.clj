@@ -315,8 +315,3 @@
 ;; https://github.com/clj-commons/hickory
 @(get-iqdb (io/file "/Volumes/Untitled 1/Grabber/kazuharu_kina/33767cc3b60dcebb3733854dd03b7da5.jpg") {:3d? false})
 @(get-ascii2d (io/file "/Volumes/Untitled 1/Grabber/kazuharu_kina/33767cc3b60dcebb3733854dd03b7da5.jpg") {})
-
-;; (re-find #"[A-Z][^:]*:\s*[^[A-Z]]*" "Rating: g Score: 2 Tags: 1girl backpack bag blue_bow blue_skirt bow brown_bag brown_footwear brown_hair closed_eyes collarbone eyebrows_visible_through_hair green_background hair_ribbon highres kazuharu_kina open_mouth original ponytail ribbon school_uniform serafuku simple_background skirt sleeveless smile solo teeth tongue uniform upper_teeth yellow_ribbon")
-
-;; (let [[k v] (s/split  "Rating: safe" #":")]
-;;   (print k v))
