@@ -7,8 +7,11 @@
             [clojure.string :as s]
             [hickory.select :as hs]
             [mikera.image.core :as imagez]
-            [hickory.core :as html])
-  (:import (java.nio.file FileSystems)))
+            [hickory.core :as html]
+            [bites.core]
+            [clojure.core.async :as a])
+  (:import (java.nio.file FileSystems)
+           org.apache.commons.codec.binary.Hex))
 
 ;; https://github.com/babashka/fs
 ;; https://stackoverflow.com/questions/5019978/what-is-the-most-concise-clojure-equivalent-for-rubys-dir-glob
@@ -73,21 +76,23 @@
     ret))
 
 (defn get-metadata-danbooru [md5]
-  (get-metadata {:name :danbooru
-                 :url "https://danbooru.donmai.us/posts.json"
-                 :param {:tags (str "md5:" md5)}
-                 :preprocess (fn [content]
-                               (let [original (if (seq? content) nil (first content))
-                                     split (fn [s] (if (and (= (type s) String) (not= s "")) (s/split s #"\s+") []))]
-                                 {:original original
-                                  :final {:id (:id original)
-                                          :rating (:rating original)
-                                          :md5 (:md5 original)
-                                          :general (split (:tag_string_general original))
-                                          :artist (split (:tag_string_artist original))
-                                          :copyright (split (:tag_string_copytright original))
-                                          :character (split (:tag_string_character original))
-                                          :meta (split (:tag_string_meta original))}}))}))
+  (if (md5? md5)
+    (get-metadata {:name :danbu
+                   :url "https://danbooru.donmai.us/posts.json"
+                   :param {:tags (str "md5:" md5)}
+                   :preprocess (fn [content]
+                                 (let [original (if (seq? content) nil (first content))
+                                       split (fn [s] (if (and (= (type s) String) (not= s "")) (s/split s #"\s+") []))]
+                                   {:original original
+                                    :final {:id (:id original)
+                                            :rating (:rating original)
+                                            :md5 (:md5 original)
+                                            :general (split (:tag_string_general original))
+                                            :artist (split (:tag_string_artist original))
+                                            :copyright (split (:tag_string_copytright original))
+                                            :character (split (:tag_string_character original))
+                                            :meta (split (:tag_string_meta original))}}))})
+    {:error :not-md5}))
 
 ;; https://gelbooru.com/index.php?page=wiki&s=view&id=18780
 ;; Have to use General csv/h5 database to get the metadata of tags. 
@@ -99,30 +104,32 @@
 ;; https://www.npmjs.com/package/sankaku-api?activeTab=explore
 ;; https://capi-v2.sankakucomplex.com/posts/keyset
 (defn get-metadata-sankaku [md5]
-  (get-metadata {:name :sankaku
-                 :url "https://capi-v2.sankakucomplex.com/posts/keyset"
-                 :param {:tags (str "md5:" md5)}
-                 :preprocess (fn [content]
-                               (let [get-original #(first (:data %))
-                                     original (get-original content)
-                                     type-map {:0 :general
-                                               :1 :artist
-                                               :3 :copyright
-                                               :4 :character
-                                               :8 :medium ;; highres/white background
-                                               :9 :meta ;; tagme
-                                               }
-                                     type-cvt #(get type-map (keyword (str %)) :other)
-                                     tags (map #(do {:name (:tagName %) :type (type-cvt (:type %))})
-                                               (:tags original))
-                                     tags-list (reduce
-                                                (fn [acc {:keys [name type]}]
-                                                  (assoc acc type (conj (get acc type) name)))
-                                                {} tags)]
-                                 {:original original
-                                  :final (merge tags-list {:id (:id original)
-                                                           :rating (:rating original)
-                                                           :md5 (:md5 original)})}))}))
+  (if (md5? md5)
+    (get-metadata {:name :sankaku
+                   :url "https://capi-v2.sankakucomplex.com/posts/keyset"
+                   :param {:tags (str "md5:" md5)}
+                   :preprocess (fn [content]
+                                 (let [get-original #(first (:data %))
+                                       original (get-original content)
+                                       type-map {:0 :general
+                                                 :1 :artist
+                                                 :3 :copyright
+                                                 :4 :character
+                                                 :8 :medium ;; highres/white background
+                                                 :9 :meta ;; tagme
+                                                 }
+                                       type-cvt #(get type-map (keyword (str %)) :other)
+                                       tags (map #(do {:name (:tagName %) :type (type-cvt (:type %))})
+                                                 (:tags original))
+                                       tags-list (reduce
+                                                  (fn [acc {:keys [name type]}]
+                                                    (assoc acc type (conj (get acc type) name)))
+                                                  {} tags)]
+                                   {:original original
+                                    :final (merge tags-list {:id (:id original)
+                                                             :rating (:rating original)
+                                                             :md5 (:md5 original)})}))})
+    {:error :not-md5}))
 
 ;; (defn get-metadata-sankaku-by-id [id]
 ;;   (get-metadata {:name :sankaku
@@ -133,34 +140,35 @@
 
 ;; why the tags is placed at outside?
 (defn get-metadata-yandere [md5]
-  (get-metadata {:name :yandere
-                 :url "https://yande.re/post.json"
-                 :param {:api_version 2 :tags (str "md5:" md5) :include_tags 1}
-                 :preprocess (fn [content]
-                               (let [get-original
-                                     (fn [content] (let [post (first (:posts content))
-                                                         tags (:tags content)]
-                                                     (if (some? post) (assoc post :tags tags) nil)))
-                                     get-type (fn [tags type] (for [[tag t] tags :when (= t type)] tag))
-                                     original (get-original content)
+  (if (md5? md5)
+    (get-metadata {:name :yandere
+                   :url "https://yande.re/post.json"
+                   :param {:api_version 2 :tags (str "md5:" md5) :include_tags 1}
+                   :preprocess (fn [content]
+                                 (let [get-original
+                                       (fn [content] (let [post (first (:posts content))
+                                                           tags (:tags content)]
+                                                       (if (some? post) (assoc post :tags tags) nil)))
+                                       get-type (fn [tags type] (for [[tag t] tags :when (= t type)] tag))
+                                       original (get-original content)
                                      ;; we only get one image if we specify md5, so the tags must belong to the image we retrieve
-                                     get-final (fn [original] {:rating (:rating original)
-                                                               :artist (get-type (:tags original) "artist")
-                                                               :copyright (get-type (:tags original) "copyright")
-                                                               :character (get-type (:tags original) "character")
-                                                               :group (get-type (:tags original) "circle")
-                                                               :general (get-type (:tags original) "general")
-                                                               :md5 (:md5 original)
-                                                               :id (:id original)})]
-                                 (if (some? original) {:original original :final (get-final original)} nil)))}))
-
+                                       get-final (fn [original] {:rating (:rating original)
+                                                                 :artist (get-type (:tags original) "artist")
+                                                                 :copyright (get-type (:tags original) "copyright")
+                                                                 :character (get-type (:tags original) "character")
+                                                                 :group (get-type (:tags original) "circle")
+                                                                 :general (get-type (:tags original) "general")
+                                                                 :md5 (:md5 original)
+                                                                 :id (:id original)})]
+                                   (if (some? original) {:original original :final (get-final original)} nil)))})
+    {:error :not-md5}))
 
 (def files (glob "/Volumes/Untitled 1/Grabber" (make-pattern exts)))
 (cats-md5 files)
 
 (get-metadata-yandere "b0c35b7124b721319911ebc1d03b85e4")
 (get-metadata-sankaku "f6f3fc979c1609372e491d101ba51f09")
-@(get-metadata-danbooru "f6f3fc979c1609372e491d101ba51f09")
+(get-metadata-danbooru "f6f3fc979c1609372e491d101ba51f09")
 
 (defn get-new-size
   ([old-size] (get-new-size old-size {}))
@@ -310,8 +318,56 @@
 
 ;; pay attention to short_remaining and long_remaining
 ;; if short_remaining is 0, wait for 30 seconds
-@(get-sauce (io/file "/Volumes/Untitled 1/Grabber/maachi/90375559_p0 - 無題.jpg") {:api-key "009934e06a88a3a1f28c565d69a5273ee47008e1"})
+(get-sauce (io/file "/Volumes/Untitled 1/Grabber/maachi/90375559_p0 - 無題.jpg") {:api-key "009934e06a88a3a1f28c565d69a5273ee47008e1"})
 
 ;; https://github.com/clj-commons/hickory
-@(get-iqdb (io/file "/Volumes/Untitled 1/Grabber/kazuharu_kina/33767cc3b60dcebb3733854dd03b7da5.jpg") {:3d? false})
-@(get-ascii2d (io/file "/Volumes/Untitled 1/Grabber/kazuharu_kina/33767cc3b60dcebb3733854dd03b7da5.jpg") {})
+(get-iqdb (io/file "/Volumes/Untitled 1/Grabber/kazuharu_kina/33767cc3b60dcebb3733854dd03b7da5.jpg") {:3d? false})
+(get-ascii2d (io/file "/Volumes/Untitled 1/Grabber/kazuharu_kina/33767cc3b60dcebb3733854dd03b7da5.jpg") {})
+
+(defn calc-md5 [file]
+  (let [md (java.security.MessageDigest/getInstance "MD5")
+        fis (java.io.FileInputStream. file)]
+    ;; copilot wrote this
+    (loop [read (.read fis)]
+      (when (not= -1 read)
+        (.update md (byte-array [(int read)]))
+        (recur (.read fis))))
+    (.digest md)))
+
+;; https://stackoverflow.com/questions/10062967/clojures-equivalent-to-pythons-encodehex-and-decodehex
+(defn bytes->string [bytes]
+  (s/join (map #(format "%02x" %) bytes)))
+
+((comp bytes->string calc-md5) (io/file "/Volumes/Untitled 1/Grabber/kazuharu_kina/33767cc3b60dcebb3733854dd03b7da5.jpg"))
+;; (-> (io/file "/Volumes/Untitled 1/Grabber/kazuharu_kina/33767cc3b60dcebb3733854dd03b7da5.jpg")
+;;     (calc-md5)
+;;     (bytes->string))
+
+
+
+(def semaphore (atom 0))
+;; https://stackoverflow.com/questions/41283956/start-and-stop-core-async-interval
+
+(def long-str "
+02 07 06 07 06 07 06 07 06 07 06 07 06 07 06 07 06 07 06 07 06 07 06 07 06 07 06
+FF FF FF FF 0F 1F 1F 1F 1F 1F 1F 1F 1F 1F 1F 1F 1F 1F 1F 1F 1F 1F 1F 1F 1F 1F 1F
+1F 1F 1F 1F FF FF FF FF 0D 01 01 01 01 01 01 01 01 01 01 01 01 01 01 01 01 01 01
+01 01 01 01 01 01 01 01 FF FF FF FF 0C 01 01 01 01 01 01 01 01 01 01 01 01 01 01
+01 01 01 01 01 01 01 01 01 01 01 01 FF FF FF FF 0E 09 09 09 09 09 09 09 09 09 0A
+09 09 09 09 09 09 09 09 09 09 09 0A 09 09 09 09 FF FF FF FF 00 0A 1E 1A 
+              ")
+
+(defn str->bytes
+  "Convert string to byte array."
+  ([^String s]
+   (str->bytes s "UTF-8"))
+  ([^String s, ^String encoding]
+   (.getBytes s encoding)))
+(str->bytes long-str)
+
+(defn hex->bytes
+  "Convert hexadecimal encoded string to bytes array."
+  [^String data]
+  (Hex/decodeHex (.toCharArray data)))
+
+(s/join ", " (map #(format "0x%02x" %) (hex->bytes (s/replace  long-str #"\s+" ""))))
