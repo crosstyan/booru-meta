@@ -422,7 +422,7 @@
       (when @flag
         (a/go-loop []
           (if (>= @short-limit (:max-limit options))
-            (do (a/<! (a/timeout 500)) (recur))
+            (when @flag (a/<! (a/timeout 500)) (recur))
             (do (action file)
                 (swap! short-limit inc))))))
     #(do (cancel)
