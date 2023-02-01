@@ -136,11 +136,13 @@
                                                   (fn [acc {:keys [name type]}]
                                                     (assoc acc type (conj (get acc type) name)))
                                                   {} tags)]
-                                   {:data
-                                    {:original original
-                                     :final (merge tags-list {:id (:id original)
-                                                              :rating (:rating original)
-                                                              :md5 (:md5 original)})}}))})
+                                   (if (some? original)
+                                     {:data
+                                      {:original original
+                                       :final (merge tags-list {:id (:id original)
+                                                                :rating (:rating original)
+                                                                :md5 (:md5 original)})}}
+                                     {:error :no-match})))})
     {:error :not-md5}))
 
 ;; (defn get-metadata-sankaku-by-id [id]
