@@ -1,1 +1,0 @@
-["^ ","~$annotate-host-info",["^ ","~:row",18,"~:col",1,"~:fixed-arities",["~#set",[1]],"~:name","^0","~:ns","~$typed.clj.analyzer.passes.annotate-host-info","~:top-ns","^7","~:type","~:fn"],"~:filename","/Users/crosstyan/.m2/repository/org/typedclojure/typed.clj.analyzer/1.0.32/typed.clj.analyzer-1.0.32.jar:typed/clj/analyzer/passes/annotate_host_info.clj"]

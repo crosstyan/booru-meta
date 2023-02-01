@@ -1,1 +1,0 @@
-["^ ","~$protocol-method-var-ann",["^ ","~:row",13,"~:col",1,"~:fixed-arities",["~#set",[3]],"~:name","^0","~:ns","~$typed.cljc.checker.collect-utils","~:top-ns","^7","~:type","~:fn"],"~:filename","/Users/crosstyan/.m2/repository/org/typedclojure/typed.clj.checker/1.0.32/typed.clj.checker-1.0.32.jar:typed/cljc/checker/collect_utils.clj"]

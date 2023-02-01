@@ -13,11 +13,11 @@
                  [org.clojure/data.json "2.4.0"]
                  [cheshire "5.11.0"]
                  [net.mikera/imagez "0.12.0"]
-                 [com.luposlip/nd-db "0.7.2"]
                  [techascent/tech.ml.dataset "7.000-beta-25"]
                  [org.clojure/core.async "1.6.673"]
                  [org.clj-commons/hickory "0.7.3"]
                  [org.clj-commons/byte-streams "0.3.2"]
-                 [bites "0.3.11"]]
+                 [bites "0.3.11"]
+                 [com.novemberain/monger "3.5.0"]]
   :profiles {:dev {:dependencies [[org.typedclojure/typed.clj.checker "1.0.32"]]}}
   :repl-options {:init-ns booru-meta.core})

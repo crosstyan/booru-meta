@@ -39,8 +39,12 @@
   (if (not= (count s) 32)
     false
     (some? (re-find #"^[0-9a-f]+$" s))))
+
+(defn file->stem [file]
+  (com.google.common.io.Files/getNameWithoutExtension (str file)))
+
 (defmethod md5? java.io.File [file]
-  (let [stem (com.google.common.io.Files/getNameWithoutExtension (str file))
+  (let [stem (file->stem file)
         stem (s/lower-case stem)]
     (md5? stem)))
 
@@ -346,7 +350,46 @@
 
 
 (def semaphore (atom 0))
+
 ;; https://stackoverflow.com/questions/41283956/start-and-stop-core-async-interval
+;; https://github.com/clojure/core.async/blob/master/examples/walkthrough.clj
+(defn interval 
+"apply function `f` with `args` every `mills` milliseconds.
+ Returns a function that can be called to stop the interval."
+  [f args mills]
+  (let [timimg (a/chan)
+        kickoff #(a/go
+                   (a/<! (a/timeout mills))
+                   (a/>! timimg true))]
+    (a/go-loop []
+      (when (a/<! timimg)
+        (a/go (apply f args))
+        (kickoff)
+        (recur))
+      (kickoff)
+      #(a/close! timimg))))
+
+;; https://stackoverflow.com/questions/25948511/when-to-use-if-and-when-in-clojure
+(defn run-batch
+  "`short-limit` should be atom. "
+  [file-list options]
+  (let [short-limit (atom 0)
+        default {:max-limit 17 :reset-interval-ms 30000}
+        options (merge default options)
+        reset-limit #(reset! % 0)
+        cancel (interval reset-limit [short-limit] (:reset-interval-ms options))
+        flag (atom true)]
+    (doseq [file file-list]
+      (when @flag
+        (a/go-loop []
+          (if (>= @short-limit (:max-limit options))
+            (do (a/<! (a/timeout 500)) (recur))
+            (do (let [stem (file->stem file)]
+                  (a/go (let [info (:data @(get-metadata-danbooru stem))] 
+                         ())))
+                (swap! short-limit inc))))))
+    #(do (cancel)
+         (reset! flag false))))
 
 (def long-str "
 02 07 06 07 06 07 06 07 06 07 06 07 06 07 06 07 06 07 06 07 06 07 06 07 06 07 06
