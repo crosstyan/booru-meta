@@ -1,5 +1,6 @@
 (ns booru-meta.core
-  (:require [clojure.java.io :as io]
+  (:require [babashka.fs :as fs]
+            [clojure.java.io :as io]
             [typed.clojure :as t]
             [clj-http.client :as client]
             [progrock.core :as pr]
@@ -16,6 +17,7 @@
 ;; https://github.com/babashka/fs
 ;; https://stackoverflow.com/questions/5019978/what-is-the-most-concise-clojure-equivalent-for-rubys-dir-glob
 (def exts ["jpg" "jpeg" "png" "webp"])
+
 
 ;; okay you have to use two stars (idk why)
 (defn glob [path pattern]
@@ -65,7 +67,9 @@
 ;;  :url "https://danbooru.donmai.us/posts.json"
 ;;  :make-param (fn [md5] {:tags (str "md5:" md5)})
 ;;  :preprocess (fn [content] (if (seq? content) nil (first content)))}
-(defn get-metadata [options]
+(defn get-metadata
+  "`preprocess` is expected to return a map with `:data` or `:error` keys."
+  [options]
   (let [url (:url options)
         header {"User-Agent" user-agent}
         preprocess (:preprocess options)
@@ -74,7 +78,7 @@
         ret (promise)]
     (client/get url {:headers header :content-type :json :as :json :query-params param :async true}
                 (fn [res] (let [processed (preprocess (:body res))
-                                wrapped (if (some? processed) {:data processed :source source :error nil} {:data nil :source source :error :empty})]
+                                wrapped (if (some? processed) {:data (:data processed) :source source} {:data nil :source source :error :empty})]
                             (deliver ret wrapped)))
                 (fn [err] (deliver ret {:data nil :source source :error err})))
     ret))
@@ -87,15 +91,18 @@
                    :preprocess (fn [content]
                                  (let [original (if (seq? content) nil (first content))
                                        split (fn [s] (if (and (= (type s) String) (not= s "")) (s/split s #"\s+") []))]
-                                   {:original original
-                                    :final {:id (:id original)
-                                            :rating (:rating original)
-                                            :md5 (:md5 original)
-                                            :general (split (:tag_string_general original))
-                                            :artist (split (:tag_string_artist original))
-                                            :copyright (split (:tag_string_copytright original))
-                                            :character (split (:tag_string_character original))
-                                            :meta (split (:tag_string_meta original))}}))})
+                                   (if (some? original)
+                                     {:data
+                                      {:original original
+                                       :final {:id (:id original)
+                                               :rating (:rating original)
+                                               :md5 (:md5 original)
+                                               :general (split (:tag_string_general original))
+                                               :artist (split (:tag_string_artist original))
+                                               :copyright (split (:tag_string_copytright original))
+                                               :character (split (:tag_string_character original))
+                                               :meta (split (:tag_string_meta original))}}}
+                                     {:error :no-match})))})
     {:error :not-md5}))
 
 ;; https://gelbooru.com/index.php?page=wiki&s=view&id=18780
@@ -129,10 +136,11 @@
                                                   (fn [acc {:keys [name type]}]
                                                     (assoc acc type (conj (get acc type) name)))
                                                   {} tags)]
-                                   {:original original
-                                    :final (merge tags-list {:id (:id original)
-                                                             :rating (:rating original)
-                                                             :md5 (:md5 original)})}))})
+                                   {:data
+                                    {:original original
+                                     :final (merge tags-list {:id (:id original)
+                                                              :rating (:rating original)
+                                                              :md5 (:md5 original)})}}))})
     {:error :not-md5}))
 
 ;; (defn get-metadata-sankaku-by-id [id]
@@ -164,11 +172,28 @@
                                                                  :general (get-type (:tags original) "general")
                                                                  :md5 (:md5 original)
                                                                  :id (:id original)})]
-                                   (if (some? original) {:original original :final (get-final original)} nil)))})
+                                   (if (some? original)
+                                     {:data {:original original :final (get-final original)}}
+                                     {:error :no-match})))})
     {:error :not-md5}))
 
 (def files (glob "/Volumes/Untitled 1/Grabber" (make-pattern exts)))
 (cats-md5 files)
+
+(fs/relativize (fs/path "/Volumes/Untitled 1/Grabber") (fs/path "/Volumes/Untitled 1/Grabber/nashiko_(nanaju_ko)/5222d5324f68d6a5693e6864d3d1e9ab.jpg"))
+(fs/normalize (fs/path "/Volumes/Untitled 1/Grabber"))
+;; https://stackoverflow.com/questions/33273341/java-nio-how-to-add-extension-to-an-absolute-path
+(.resolveSibling (fs/path "/Volumes/Untitled 1/Grabber/nashiko_(nanaju_ko)/5222d5324f68d6a5693e6864d3d1e9ab.jpg") "123")
+(fs/path "/Volumes/Untitled 1/Grabber/nashiko_(nanaju_ko)/5222d5324f68d6a5693e6864d3d1e9ab.jpg")
+(file->stem (fs/path "/Volumes/Untitled 1/Grabber/nashiko_(nanaju_ko)/5222d5324f68d6a5693e6864d3d1e9ab.jpg"))
+(.getFileName (fs/path "/Volumes/Untitled 1/Grabber/nashiko_(nanaju_ko)/5222d5324f68d6a5693e6864d3d1e9ab.jpg"))
+
+(defn with-extension [path ext]
+  (let [path (fs/path path)
+        clean-ext (s/replace ext #"^\." "")
+        new-path (.resolveSibling path (str (file->stem path) "." clean-ext))]
+    new-path))
+;; (with-extension (io/file "/Volumes/Untitled 1/Grabber/nashiko_(nanaju_ko)/5222d5324f68d6a5693e6864d3d1e9ab.jpg") "txt")
 
 (get-metadata-yandere "b0c35b7124b721319911ebc1d03b85e4")
 (get-metadata-sankaku "f6f3fc979c1609372e491d101ba51f09")
@@ -353,8 +378,8 @@
 
 ;; https://stackoverflow.com/questions/41283956/start-and-stop-core-async-interval
 ;; https://github.com/clojure/core.async/blob/master/examples/walkthrough.clj
-(defn interval 
-"apply function `f` with `args` every `mills` milliseconds.
+(defn interval
+  "apply function `f` with `args` every `mills` milliseconds.
  Returns a function that can be called to stop the interval."
   [f args mills]
   (let [timimg (a/chan)
@@ -365,31 +390,48 @@
       (when (a/<! timimg)
         (a/go (apply f args))
         (kickoff)
-        (recur))
-      (kickoff)
-      #(a/close! timimg))))
+        (recur)))
+    (kickoff)
+    #(a/close! timimg)))
 
 ;; https://stackoverflow.com/questions/25948511/when-to-use-if-and-when-in-clojure
 (defn run-batch
-  "`short-limit` should be atom. "
+  "`short-limit` should be atom."
   [file-list options]
   (let [short-limit (atom 0)
-        default {:max-limit 17 :reset-interval-ms 30000}
+        default {:max-limit 17 :reset-interval-ms 30000 :root-path nil}
         options (merge default options)
         reset-limit #(reset! % 0)
         cancel (interval reset-limit [short-limit] (:reset-interval-ms options))
-        flag (atom true)]
+        flag (atom true)
+        action (fn [file]
+                 (a/go
+                   (let [stem (file->stem file)
+                         info @(get-metadata-danbooru stem)
+                         path (if (some? (:root-path options))
+                                (fs/relativize (fs/path (:root-path options)) (fs/path (str file))) (str file))]
+                     (if (some? (:data info))
+                       (do
+                         ((comp #(fs/write-lines (with-extension file "json") [%]) json/encode)
+                          (merge info {:md5 stem
+                                       :real-md5 ((comp bytes->string calc-md5) file)
+                                       :path path}))
+                         (println (format "%s" (str path))))
+                       (println (format "%s not found" (str path)))))))]
     (doseq [file file-list]
       (when @flag
         (a/go-loop []
           (if (>= @short-limit (:max-limit options))
             (do (a/<! (a/timeout 500)) (recur))
-            (do (let [stem (file->stem file)]
-                  (a/go (let [info (:data @(get-metadata-danbooru stem))] 
-                         ())))
+            (do (action file)
                 (swap! short-limit inc))))))
     #(do (cancel)
          (reset! flag false))))
+
+;; (fs/write-lines (fs/path "/Users/crosstyan/Code/test.txt")  ["test"])
+
+(def c (run-batch (take 30 (:md5 (cats-md5 files))) {:max-limit 30}))
+(c)
 
 (def long-str "
 02 07 06 07 06 07 06 07 06 07 06 07 06 07 06 07 06 07 06 07 06 07 06 07 06 07 06
