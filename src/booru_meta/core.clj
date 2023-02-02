@@ -26,7 +26,7 @@
         action (fn [file]
                  (a/go
                    (let [stem (file->stem file)
-                         info @(booru/get-metadata-danbooru stem)
+                         info @(booru/danbooru stem)
                          path (if (some? (:root-path options))
                                 (fs/relativize (fs/path (:root-path options)) (fs/path (str file))) (str file))]
                      (if (some? (:data info))

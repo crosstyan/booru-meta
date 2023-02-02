@@ -11,8 +11,8 @@
 
 
 ;; okay you have to use two stars (idk why)
-(defn glob 
-"See also `babashka.fs/glob`. Just a redundant implementation."
+(defn glob
+  "See also `babashka.fs/glob`. Just a redundant implementation."
   [path pattern]
   (let [files (file-seq (io/file path))
         java-fs (java.nio.file.FileSystems/getDefault)
@@ -23,8 +23,8 @@
             files)))
 (t/ann glob [t/Str t/Str :-> (t/Seq java.io.File)])
 
-(defn make-pattern 
-"make glob pattern to capture list of extensions."
+(defn make-pattern
+  "make glob pattern to capture list of extensions."
   [exts]
   (str "**.{"
        (s/join "," exts)
@@ -32,7 +32,7 @@
 (def image-glob-pattern (make-pattern ["jpg" "jpeg" "png" "webp"]))
 
 (defmulti md5?
-"Check if string or filename is md5 hash."
+  "Check if string or filename is md5 hash."
   type)
 (defmethod md5? :default [_x] false)
 (defmethod md5? String [s]
@@ -154,12 +154,12 @@
         new-path (.resolveSibling path (str (file->stem path) "." clean-ext))]
     new-path))
 
-(defn bytes->string 
-"Convert bytes array to string."
+(defn bytes->string
+  "Convert bytes array to string."
   [bytes] (s/join (map #(format "%02x" %) bytes)))
 
-(defn calc-md5 
-"Calculate md5 of a file.
+(defn calc-md5
+  "Calculate md5 of a file.
  
  `java.io.File :-> ByteArray`. See also `bytes->string`"
   [file]
@@ -171,3 +171,17 @@
         (.update md (byte-array [(int read)]))
         (recur (.read fis))))
     (.digest md)))
+
+(defmulti int-only?
+  "Check if a string is a valid POSITIVE integer."
+  type)
+(defmethod int-only? Integer [n]
+  (>= 0 n))
+(defmethod int-only? Long [n]
+  (>= 0 n))
+(defmethod int-only? BigInteger [n]
+  (>= 0 n))
+(defmethod int-only? String [s]
+  (some? (re-find #"^\d+$" s)))
+(defmethod int-only? :default [s]
+  (int-only? (str s)))

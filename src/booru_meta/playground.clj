@@ -40,17 +40,18 @@
 (.getFileName (fs/path "/Volumes/Untitled 1/Grabber/nashiko_(nanaju_ko)/5222d5324f68d6a5693e6864d3d1e9ab.jpg"))
 ;; (with-extension (io/file "/Volumes/Untitled 1/Grabber/nashiko_(nanaju_ko)/5222d5324f68d6a5693e6864d3d1e9ab.jpg") "txt")
 
-(get-metadata-yandere "b0c35b7124b721319911ebc1d03b85e4")
-(get-metadata-sankaku "f6f3fc979c1609372e491d101ba51f09")
-(get-metadata-danbooru "f6f3fc979c1609372e491d101ba51f09")
+@(yandere "b0c35b7124b721319911ebc1d03b85e4")
+@(yandere 1048103)
+(sankaku "f6f3fc979c1609372e491d101ba51f09")
+(danbooru "f6f3fc979c1609372e491d101ba51f09")
 
 ;; pay attention to short_remaining and long_remaining
 ;; if short_remaining is 0, wait for 30 seconds
-(get-sauce (io/file "/Volumes/Untitled 1/Grabber/maachi/90375559_p0 - 無題.jpg") {:api-key "009934e06a88a3a1f28c565d69a5273ee47008e1"})
+(sauce (io/file "/Volumes/Untitled 1/Grabber/maachi/90375559_p0 - 無題.jpg") {:api-key "009934e06a88a3a1f28c565d69a5273ee47008e1"})
 
 ;; https://github.com/clj-commons/hickory
-(get-iqdb (io/file "/Volumes/Untitled 1/Grabber/kazuharu_kina/33767cc3b60dcebb3733854dd03b7da5.jpg") {:3d? false})
-(get-ascii2d (io/file "/Volumes/Untitled 1/Grabber/kazuharu_kina/33767cc3b60dcebb3733854dd03b7da5.jpg") {})
+(iqdb (io/file "/Volumes/Untitled 1/Grabber/kazuharu_kina/33767cc3b60dcebb3733854dd03b7da5.jpg") {:3d? false})
+(ascii2d (io/file "/Volumes/Untitled 1/Grabber/kazuharu_kina/33767cc3b60dcebb3733854dd03b7da5.jpg") {})
 
 ;; https://stackoverflow.com/questions/10062967/clojures-equivalent-to-pythons-encodehex-and-decodehex
 

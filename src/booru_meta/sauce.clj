@@ -14,7 +14,7 @@
 
 
 ;; https://github.com/kitUIN/PicImageSearch/blob/3c7f13cab5d49d38f6236f8f26f54a2e64d06175/PicImageSearch/saucenao.py#L27
-(defn get-sauce [file options]
+(defn sauce [file options]
   (let [body (read-compress-img file)
         api-key (:api-key options)
         ret (promise)
@@ -33,7 +33,7 @@
     ret))
 
 ;; iqdb will return a html page. Need to parse it.
-;; You can't match a list. Have to use map or first.
+;; Hickory Tips: you can't match a list. Have to use `map` or `first`.
 (defn extract-iqdb-info [iqdb-raw-html-string]
   (let [h (html/as-hickory (html/parse iqdb-raw-html-string))
         nomatch (hs/select (hs/child (hs/class "nomatch")) h)
@@ -55,19 +55,21 @@
                     (fn [e] (hs/select (hs/descendant (hs/tag :a)) e))) tbodies)]
     (if (seq nomatch) nil (map #(merge %1 %2) sims links))))
 
-(defn get-iqdb [file options]
-  (let [body (read-compress-img file)
-        ua (if-let [u (:user-agent options)] u default-user-agent)
-        three-d? (if (some? (:3d? options)) (:3d? options) false)
-        url (if three-d? "https://3d.iqdb.org/" "https://iqdb.org/")
-        source :iqdb
-        ret (promise)]
-    (client/post url {:async true :multipart [{:name "file" :content body}] :as :auto :headers {"User-Agent" ua}}
-                 (fn [response]
-                   (let [data (extract-iqdb-info (:body response))]
-                     (deliver ret (if (some? data) {:data data :source source} {:error :no-match}))))
-                 (fn [error] (deliver ret {:error error :source source})))
-    ret))
+(defn iqdb
+  ([file] (iqdb file {}))
+  ([file options]
+   (let [body (read-compress-img file)
+         ua (if-let [u (:user-agent options)] u default-user-agent)
+         three-d? (if-let [f (:3d? options)] f false)
+         url (if three-d? "https://3d.iqdb.org/" "https://iqdb.org/")
+         source :iqdb
+         ret (promise)]
+     (client/post url {:async true :multipart [{:name "file" :content body}] :as :auto :headers {"User-Agent" ua}}
+                  (fn [response]
+                    (let [data (extract-iqdb-info (:body response))]
+                      (deliver ret (if (some? data) {:data data :source source} {:error :no-match}))))
+                  (fn [error] (deliver ret {:error error :source source})))
+     ret)))
 
 (defn extract-ascii2d-info [raw-html-string]
   (let [hp (html/as-hickory (html/parse raw-html-string))
@@ -82,26 +84,31 @@
                             #(hs/select (hs/descendant (hs/class "detail-box")) %))
                       (hs/select (hs/child (hs/class "item-box")) hp))))))
 
-(defn get-ascii2d [file options]
-  (let [body (read-compress-img file)
-        ua (if-let [u (:user-agent options)] u default-user-agent)
-        url "https://ascii2d.obfs.dev/"
-        append-url (fn [url path] (let [uri (java.net.URI/create url)]
-                                    (str (.resolve uri path))))
-        is-bovw (if (some? (:bovw? options)) (:bovw? options) false)
-        source :ascii2d
-        ret (promise)]
-    (client/post (append-url url "/search/file") {:async true :multipart [{:name "file" :content body}] :as :auto :headers {"User-Agent" ua}}
-                 (fn [response]
-                   (let [new-url (get-in response [:headers "Location"])
-                         new-url (if is-bovw (s/replace-first new-url #"\/color\/" "/bovw/") new-url)]
-                     (if (some? new-url)
-                       (client/get new-url {:async true :as :auto :headers {"User-Agent" ua}}
-                                   (fn [response]
-                                     (let [data (extract-ascii2d-info (:body response))]
-                                       (if (some? data) (deliver ret {:data data :source source})
-                                           (deliver ret {:error :no-match :source source}))))
-                                   (fn [error] (deliver ret {:error error :source source})))
-                       (deliver ret {:error :no-match :source source}))))
-                 (fn [error] (deliver ret {:error error :source source})))
-    ret))
+(defn ascii2d
+  "Get the result from ascii2d.net.
+ Personally I don't recommend using this site 
+ since it only return the result without similarity."
+  ([file] (ascii2d file {}))
+  ([file options]
+   (let [body (read-compress-img file)
+         ua (if-let [u (:user-agent options)] u default-user-agent)
+         url "https://ascii2d.obfs.dev/"
+         append-url (fn [url path] (let [uri (java.net.URI/create url)]
+                                     (str (.resolve uri path))))
+         is-bovw (if-let [b (:bovw? options)] b false)
+         source :ascii2d
+         ret (promise)]
+     (client/post (append-url url "/search/file") {:async true :multipart [{:name "file" :content body}] :as :auto :headers {"User-Agent" ua}}
+                  (fn [response]
+                    (let [new-url (get-in response [:headers "Location"])
+                          new-url (if is-bovw (s/replace-first new-url #"\/color\/" "/bovw/") new-url)]
+                      (if (some? new-url)
+                        (client/get new-url {:async true :as :auto :headers {"User-Agent" ua}}
+                                    (fn [response]
+                                      (let [data (extract-ascii2d-info (:body response))]
+                                        (if (some? data) (deliver ret {:data data :source source})
+                                            (deliver ret {:error :no-match :source source}))))
+                                    (fn [error] (deliver ret {:error error :source source})))
+                        (deliver ret {:error :no-match :source source}))))
+                  (fn [error] (deliver ret {:error error :source source})))
+     ret)))
