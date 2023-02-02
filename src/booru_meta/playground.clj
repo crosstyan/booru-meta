@@ -30,6 +30,10 @@
 (count long-list)
 
 (def files (glob "/Volumes/Untitled 1/Grabber" image-glob-pattern))
+(def jsons (glob "/Volumes/Untitled 1/Grabber" (make-pattern ["json"])))
+(doseq [file jsons]
+       (fs/read-all-lines file))
+
 (categorize-by-md5 files)
 
 (def cancel (run-batch (shuffle (:md5 (categorize-by-md5 files))) {:max-limit 20 :reset-interval-ms 25000 :root-path "/Volumes/Untitled 1/Grabber" :random-delay-ms [100 400]}))
