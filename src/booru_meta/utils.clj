@@ -176,12 +176,15 @@
   "Check if a string is a valid POSITIVE integer."
   type)
 (defmethod int-only? Integer [n]
-  (>= 0 n))
+  (>= n 0))
 (defmethod int-only? Long [n]
-  (>= 0 n))
+  (>= n 0))
 (defmethod int-only? BigInteger [n]
-  (>= 0 n))
+  (>= n 0))
 (defmethod int-only? String [s]
   (some? (re-find #"^\d+$" s)))
 (defmethod int-only? :default [s]
   (int-only? (str s)))
+
+(defn rand-int-range [a b]
+  (+ a (rand-int (- b a))))

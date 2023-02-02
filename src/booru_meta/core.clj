@@ -18,7 +18,7 @@
 (defn run-batch
   [file-list options]
   (let [short-limit (atom 0)
-        default {:max-limit 17 :reset-interval-ms 30000 :root-path nil}
+        default {:max-limit 17 :reset-interval-ms 30000 :root-path nil :random-delay-ms [0 100]}
         options (merge default options)
         reset-limit #(reset! % 0)
         cancel (interval reset-limit [short-limit] (:reset-interval-ms options))
@@ -28,7 +28,7 @@
                    (let [stem (file->stem file)
                          info @(booru/danbooru stem)
                          path (if (some? (:root-path options))
-                                (fs/relativize (fs/path (:root-path options)) (fs/path (str file))) (str file))]
+                                (str (fs/relativize (fs/path (:root-path options)) (fs/path (str file)))) (str file))]
                      (if (some? (:data info))
                        (do
                          ((comp #(fs/write-lines (with-extension file "json") [%]) json/encode)
@@ -36,13 +36,15 @@
                                        :real-md5 ((comp bytes->string calc-md5) file)
                                        :path path}))
                          (println (format "%s" (str path))))
-                       (println (format "%s not found" (str path)))))))]
+                       (println (format "%s error %s" (str path) (str (:error info))))))))]
     (doseq [file file-list]
-      (when @flag
+      ;; skip when json file exists
+      (when (and @flag (not (fs/exists? (with-extension file "json"))))
         (a/go-loop []
           (if (>= @short-limit (:max-limit options))
             (when @flag (a/<! (a/timeout 500)) (recur))
-            (do (action file)
-                (swap! short-limit inc))))))
+            (do (a/<! (a/timeout (apply rand-int-range (:random-delay-ms options))))
+              (action file)
+              (swap! short-limit inc))))))
     #(do (cancel)
          (reset! flag false))))
