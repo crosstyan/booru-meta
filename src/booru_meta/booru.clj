@@ -30,7 +30,7 @@
         ret (promise)]
     (client/get url {:headers header :content-type :json :as :json :query-params param :async true}
                 (fn [res] (let [processed (preprocess (:body res))
-                                wrapped (if (some? processed) {:data (:data processed) :source source} {:data nil :source source :error :empty})]
+                                wrapped (merge processed {:source source})]
                             (deliver ret wrapped)))
                 (fn [err] (deliver ret {:data nil :source source :error err})))
     ret))

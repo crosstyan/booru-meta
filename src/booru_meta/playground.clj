@@ -33,6 +33,7 @@
 (categorize-by-md5 files)
 
 (def cancel (run-batch (shuffle (:md5 (categorize-by-md5 files))) {:max-limit 20 :reset-interval-ms 25000 :root-path "/Volumes/Untitled 1/Grabber" :random-delay-ms [100 400]}))
+
 (cancel)
 
 (fs/relativize (fs/path "/Volumes/Untitled 1/Grabber") (fs/path "/Volumes/Untitled 1/Grabber/nashiko_(nanaju_ko)/5222d5324f68d6a5693e6864d3d1e9ab.jpg"))
@@ -48,7 +49,7 @@
 @(yandere 1048103)
 (sankaku "f6f3fc979c1609372e491d101ba51f09")
 @(danbooru "f6f3fc979c1609372e491d101ba51f09")
-@(danbooru "0c0d79e53b5e50c568baea759194476f")
+@(danbooru "0c0d79e53b5e50c568baea759194476a")
 
 ;; pay attention to short_remaining and long_remaining
 ;; if short_remaining is 0, wait for 30 seconds
