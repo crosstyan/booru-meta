@@ -76,7 +76,7 @@
 (def path
   (m/schema [:map
              [:absolute :string]
-             [:relative :string]]))
+             [:relative {:optional true} :string]]))
 
 (def persistent-info
   "schema for v0.1"
