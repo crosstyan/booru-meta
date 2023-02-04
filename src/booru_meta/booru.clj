@@ -197,7 +197,7 @@
    
    Tips: use `fn?` or `keyword?` to check if the return value is a function or not."
   [result]
-  (if (m/schema schema/sauce-result result)
+  (if (m/validate schema/sauce-result result)
     (let [f (get-in result [:data :final])
           l (map #(assoc % :src (link->source (:link %))) f)
           l' (filter #(some? (:src %)) l)

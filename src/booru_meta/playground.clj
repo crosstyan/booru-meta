@@ -73,12 +73,13 @@
 
 (def s3 @(ascii2d (io/file "C:\\Users\\cross\\Desktop\\mt_o\\Artists\\holy_pumpkin\\1ede42428758e996b8a9d6fb757a1974.jpg")))
 
+s3
 
 (link->source "https://danbooru.donmai.us/posts/3243061")
 (link->source "https://www.pixiv.net/artworks/70534730")
 (link->source "https://www.pixiv.net/member_illust.php?mode=medium&illust_id=70534730")
 
-(def f (sauce->booru s1)) 
+(def f (sauce->booru s3)) 
 
 (if (fn? f) @(f) f)
 
