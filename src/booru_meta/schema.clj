@@ -67,7 +67,7 @@
   (let [sauce (m/schema
                [:map
                 [:original {:optional true} :map]
-                [:final booru-final]])
+                [:final sauce-final]])
         sucess (m/walk sucess
                        (m/schema-walker
                         #(mu/update-properties % assoc :data sauce)))]
