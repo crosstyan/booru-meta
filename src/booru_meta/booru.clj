@@ -53,7 +53,7 @@
    "
   [options]
   (let [url (:url options)
-        ua (if-let [u (:user-agent options)] u default-user-agent)
+        ua (get options :user-agent default-user-agent)
         header {"User-Agent" ua}
         preprocess (:preprocess options)
         param (:param options)
@@ -193,7 +193,7 @@
 (defn sauce->booru
   "Return a function that can be used to get metadata from sauce result. 
    If the sauce is invalid, return `:invalid`. 
-   If the sauce is valid but no any sites match, return `:no-match`.
+   If the sauce is valid but no any site matches, return `:no-match`.
    
    Tips: use `fn?` or `keyword?` to check if the return value is a function or not."
   [result]

@@ -58,8 +58,9 @@
     (if (some? api-key)
       (client/post url {:async true :multipart [{:name "file" :content body}] :query-params params :as :json}
                    (fn [response]
-                     (deliver ret {:data {:final (filter #(>= (:similarity %) min-sim) (to-final (get-in response [:body :results])))} 
-                                   :extra (to-extra (get-in response [:body :header])) 
+                     (deliver ret {:data {:final (filter #(>= (:similarity %) min-sim) 
+                                                         (to-final (get-in response [:body :results])))}
+                                   :extra (to-extra (get-in response [:body :header]))
                                    :source source}))
                    (fn [error] (deliver ret {:error error :source source})))
       (deliver ret {:error :no-api-key}))
@@ -92,16 +93,16 @@
   ([file] (iqdb file {}))
   ([file options]
    (let [body (read-compress-img file)
-         ua (if-let [u (:user-agent options)] u default-user-agent)
-         three-d? (if-let [f (:3d? options)] f false)
+         ua (get options :user-agent default-user-agent)
+         three-d? (get options :3d? false)
          to-final (fn [d] {:similarity (:sim d)
                            :link (:link d)
                            :meta (:meta d)})
-         min-sim (if-let [s (:max-sim options)] s 0.8)
-         min-sim (if-let [s (#(if (and (> % 0) (< % 1)) % nil) min-sim)] s 0.8)
+         min-sim (get options :min-sim 0.8)
          url (if three-d? "https://3d.iqdb.org/" "https://iqdb.org/")
          source :iqdb
          ret (promise)]
+     (assert (and (> min-sim 0) (< min-sim 1)) "min-sim should be between 0 and 1")
      (client/post url {:async true :multipart [{:name "file" :content body}] :as :auto :headers {"User-Agent" ua}}
                   (fn [response]
                     (let [data (extract-iqdb-info (:body response))
@@ -131,12 +132,12 @@
   ([file] (ascii2d file {}))
   ([file options]
    (let [body (read-compress-img file)
-         ua (if-let [u (:user-agent options)] u default-user-agent)
+         ua (get options :user-agent default-user-agent)
          url "https://ascii2d.obfs.dev/"
          append-url (fn [url path] (let [uri (java.net.URI/create url)]
                                      (str (.resolve uri path))))
-         is-bovw (if-let [b (:bovw? options)] b false)
-         to-final (fn [d] {:link (get-in d [:work :link]) 
+         is-bovw (get options :bovw? false)
+         to-final (fn [d] {:link (get-in d [:work :link])
                            :author (:author d)})
          source :ascii2d
          ret (promise)]
