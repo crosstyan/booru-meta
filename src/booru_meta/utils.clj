@@ -188,3 +188,7 @@
 
 (defn rand-int-range [a b]
   (+ a (rand-int (- b a))))
+
+(defn map->query [m]
+  (let [query (map (fn [[k v]] (str (name k) ":" v)) m)]
+    (s/join " " query)))

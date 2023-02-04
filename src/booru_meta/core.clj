@@ -6,15 +6,28 @@
             [progrock.core :as pr]
             [cheshire.core :as json]
             [clojure.string :as s]
-            [bites.core]
+            [clojure.term.colors :as tc]
             [booru-meta.sauce :as sauce]
             [booru-meta.booru :as booru]
-            [clojure.core.async :as a])
+            [clojure.core.async :as a]
+            [clojure.tools.cli :refer [parse-opts]]
+            [booru-meta.schema :as schema])
   (:import (java.nio.file FileSystems)
            org.apache.commons.codec.binary.Hex)
-  (:use [booru-meta.utils]))
+  (:use [booru-meta.utils])
+  (:gen-class))
+
+;; interface
+;; Info returned from booru/saurce should be
+;; (Data {:data Hashmap|nil, :source keyword, :error keyword|exception|nil}) 
+;; Write to JSON
+;; (Path {:absolute string, :relative string|nil})
+;; {:data (Seq Data), :md5 string, :path string, :version string (the version of scheme)}
 
 ;; https://github.com/clojure/core.async/blob/master/examples/walkthrough.clj
+;; TODO: phash?
+;; https://github.com/nihas101/pHash
+;; https://github.com/KilianB/JImageHash
 (defn run-batch
   [file-list options]
   (let [short-limit (atom 0)
@@ -29,12 +42,15 @@
                  (let [stem (file->stem file)
                        info @(booru/danbooru stem)
                        path (if (some? (:root-path options))
-                              (str (fs/relativize (fs/path (:root-path options)) (fs/path (str file)))) (str file))]
-                   (if (some? (:data info))
+                              {:absolute (str file)
+                               :relative (str (fs/relativize (fs/path (:root-path options)) (fs/path (str file))))}
+                              {:absolute (str file)})]
+                   (if-let [data (:data info)]
                      (do ((comp #(fs/write-lines (with-extension file "json") [%]) json/encode)
-                          (merge info {:md5 stem
-                                       :real-md5 ((comp bytes->string calc-md5) file)
-                                       :path path}))
+                          (merge {:data [data]}
+                                 {:md5 ((comp bytes->string calc-md5) file)
+                                  :path path
+                                  :version "0.1"}))
                          (pr/print @bar))
                      nil)
                    (swap! bar pr/tick)))]
@@ -49,3 +65,21 @@
                 (action file))))))
     #(do (cancel)
          (reset! flag false))))
+
+(def args-opts
+  [["-i" "--input PATH" "Root path of images"
+    :default nil]
+   ["-h" "--help"]])
+
+(defn -main [& args]
+  (let [parsed (parse-opts args args-opts)
+        opts (:options parsed)
+        root (:input opts)
+        file-list (:md5 (categorize-by-md5 (io/file root)))]
+    (if (nil? root)
+      (println
+       (s/join "\r\n" ["booru-meta"
+                       (:summary parsed)
+                       (tc/red "error: --input is required")]))
+      (run-batch file-list {:root-path root}))))
+

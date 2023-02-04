@@ -18,6 +18,15 @@
                  [org.clj-commons/hickory "0.7.3"]
                  [org.clj-commons/byte-streams "0.3.2"]
                  [bites "0.3.11"]
-                 [com.novemberain/monger "3.5.0"]]
+                 [com.novemberain/monger "3.5.0"]
+                 [org.clojure/tools.cli "1.0.214"]
+                 [clojupyter "0.3.6"]
+                 [clojure-term-colors "0.1.0"]
+                 [metosin/malli "0.10.1"]
+                 ;; can't decide which one to use
+                 ;; I'll take malli for now
+                 [metosin/spec-tools "0.10.5"]
+                 [org.clojure/spec.alpha "0.3.218"]]
   :profiles {:dev {:dependencies [[org.typedclojure/typed.clj.checker "1.0.32"]]}}
-  :repl-options {:init-ns booru-meta.core})
+  :repl-options {:init-ns booru-meta.core}
+  :main booru-meta.core)

@@ -1,8 +1,10 @@
 (ns booru-meta.playground
   (:require [babashka.fs :as fs]
             [clojure.java.io :as io]
+            [malli.core :as m]
             [typed.clojure :as t]
             [bites.core]
+            [booru-meta.schema :as schema]
             [booru-meta.sauce :as sauce])
   (:import (java.nio.file FileSystems)
            org.apache.commons.codec.binary.Hex)
@@ -53,6 +55,8 @@
 @(yandere 1048103)
 (sankaku "f6f3fc979c1609372e491d101ba51f09")
 @(danbooru "f6f3fc979c1609372e491d101ba51f09")
+
+@(danbooru {:pixiv 8314} {:custom-query true})
 @(danbooru "0c0d79e53b5e50c568baea759194476a")
 
 ;; pay attention to short_remaining and long_remaining
@@ -62,6 +66,23 @@
 ;; https://github.com/clj-commons/hickory
 (iqdb (io/file "/Volumes/Untitled 1/Grabber/kazuharu_kina/33767cc3b60dcebb3733854dd03b7da5.jpg") {:3d? false})
 (ascii2d (io/file "/Volumes/Untitled 1/Grabber/kazuharu_kina/33767cc3b60dcebb3733854dd03b7da5.jpg") {})
+
+(def s0 @(iqdb (io/file "C:\\Users\\cross\\Desktop\\mt_o\\Artists\\holy_pumpkin\\1ede42428758e996b8a9d6fb757a1974.jpg")))
+
+(def s1 @(sauce (io/file "C:\\Users\\cross\\Desktop\\mt_o\\Artists\\holy_pumpkin\\1ede42428758e996b8a9d6fb757a1974.jpg")  {:api-key "009934e06a88a3a1f28c565d69a5273ee47008e1"}))
+
+(def s3 @(ascii2d (io/file "C:\\Users\\cross\\Desktop\\mt_o\\Artists\\holy_pumpkin\\1ede42428758e996b8a9d6fb757a1974.jpg")))
+
+
+(link->source "https://danbooru.donmai.us/posts/3243061")
+(link->source "https://www.pixiv.net/artworks/70534730")
+(link->source "https://www.pixiv.net/member_illust.php?mode=medium&illust_id=70534730")
+
+(def f (sauce->booru s1)) 
+
+(if (fn? f) @(f) f)
+
+(m/validate schema/sauce-result s3)
 
 ;; https://stackoverflow.com/questions/10062967/clojures-equivalent-to-pythons-encodehex-and-decodehex
 
