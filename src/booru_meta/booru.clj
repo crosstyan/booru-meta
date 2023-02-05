@@ -51,13 +51,10 @@
   }
 ```
    "
-  [options]
-  (let [url (:url options)
-        ua (get options :user-agent default-user-agent)
-        header {"User-Agent" ua}
-        preprocess (:preprocess options)
-        param (:param options)
-        source (:name options)
+  [& {:keys [url user-agent param preprocess source] 
+      :or {user-agent default-user-agent}}]
+  (let [
+        header {"User-Agent" user-agent}
         ret (promise)]
     (client/get url {:headers header :content-type :json :as :json :query-params param :async true}
                 (fn [res] (let [processed (preprocess (:body res))
@@ -68,9 +65,9 @@
 
 (defn danbooru
   ([postid-or-md5] (danbooru postid-or-md5 {}))
-  ([query opts]
-   (let [is-custom (:custom-query opts)
-         q (mk-query query is-custom)
+  ([query & 
+    {:keys [is-custom] :or {is-custom false}}]
+   (let [q (mk-query query is-custom)
          preprocess
          (fn [content]
            (let [original (if (seq? content) nil (first content))
@@ -106,9 +103,9 @@
 ;; https://capi-v2.sankakucomplex.com/posts/keyset
 (defn sankaku
   ([postid-or-md5] (sankaku postid-or-md5 {}))
-  ([query opts]
-   (let [is-custom (:custom-query opts)
-         q (mk-query query is-custom)
+  ([query &
+    {:keys [is-custom] :or {is-custom false}}]
+   (let [q (mk-query query is-custom)
          preprocess
          (fn [content]
            (let [get-original #(first (:data %))
@@ -146,9 +143,9 @@
 ;; why the tags is placed at outside?
 (defn yandere
   ([postid-or-md5] (yandere postid-or-md5 {}))
-  ([query opts]
-   (let [custom-query (:custom-query opts)
-         q (mk-query query custom-query)
+  ([query & 
+    {:keys [is-custom] :or {is-custom false}}]
+   (let [q (mk-query query is-custom)
          preprocess
          (fn [content]
            (let [get-original

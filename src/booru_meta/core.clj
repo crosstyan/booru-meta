@@ -29,21 +29,24 @@
 ;; https://github.com/nihas101/pHash
 ;; https://github.com/KilianB/JImageHash
 (defn run-batch
-  [file-list options]
+  [file-list & 
+   {:keys [max-limit reset-interval-ms root-path random-delay-ms]
+    :or {max-limit 17
+         reset-interval-ms 30000
+         root-path nil
+         random-delay-ms [0 100]}}]
   (let [short-limit (atom 0)
         file-list (filter #(not (fs/exists? (with-extension % "json"))) file-list)
-        default {:max-limit 17 :reset-interval-ms 30000 :root-path nil :random-delay-ms [0 100]}
-        options (merge default options)
         reset-limit #(reset! % 0)
-        cancel (interval reset-limit [short-limit] (:reset-interval-ms options))
+        cancel (interval reset-limit [short-limit] reset-interval-ms)
         flag (atom true)
         bar (atom (pr/progress-bar (count file-list)))
         action (fn [file]
                  (let [stem (file->stem file)
                        info @(booru/danbooru stem)
-                       path (if (some? (:root-path options))
+                       path (if (some? root-path)
                               {:absolute (str file)
-                               :relative (str (fs/relativize (fs/path (:root-path options)) (fs/path (str file))))}
+                               :relative (str (fs/relativize (fs/path root-path) (fs/path (str file))))}
                               {:absolute (str file)})]
                    (if-let [data (:data info)]
                      (do ((comp #(fs/write-lines (with-extension file "json") [%]) json/encode)
@@ -58,9 +61,9 @@
       ;; skip when json file exists
       (a/go-loop []
         (when @flag
-          (if (>= @short-limit (:max-limit options))
+          (if (>= @short-limit max-limit)
             (do (a/<! (a/timeout 500)) (recur))
-            (do (a/<! (a/timeout (apply rand-int-range (:random-delay-ms options))))
+            (do (a/<! (a/timeout (apply rand-int-range random-delay-ms)))
                 (swap! short-limit inc)
                 (action file))))))
     #(do (cancel)

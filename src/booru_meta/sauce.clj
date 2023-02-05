@@ -31,10 +31,9 @@
 
 
 ;; https://github.com/kitUIN/PicImageSearch/blob/3c7f13cab5d49d38f6236f8f26f54a2e64d06175/PicImageSearch/saucenao.py#L27
-(defn sauce [file options]
+(defn sauce [file & {:keys [api-key min-sim]
+                     :or {min-sim 0.8}}]
   (let [body (read-compress-img file)
-        min-sim (get options :min-sim 0.8)
-        api-key (:api-key options)
         to-final' (fn [result]
                     {:similarity (/ (Float/parseFloat (get-in result [:header :similarity])) 100)
                      :link (get-in result [:data :ext_urls 0])
@@ -56,9 +55,10 @@
                 :testmode 0}]
     (assert (and (> min-sim 0) (< min-sim 1)) "min-sim should be between 0 and 1")
     (if (some? api-key)
-      (client/post url {:async true :multipart [{:name "file" :content body}] :query-params params :as :json}
+      (client/post url {:async true :multipart [{:name "file" :content body}]
+                        :query-params params :as :json}
                    (fn [response]
-                     (deliver ret {:data {:final (filter #(>= (:similarity %) min-sim) 
+                     (deliver ret {:data {:final (filter #(>= (:similarity %) min-sim)
                                                          (to-final (get-in response [:body :results])))}
                                    :extra (to-extra (get-in response [:body :header]))
                                    :source source}))
@@ -91,19 +91,17 @@
 
 (defn iqdb
   ([file] (iqdb file {}))
-  ([file options]
+  ([file & {:keys [is-three-d min-sim user-agent]
+            :or {is-three-d false min-sim 0.8 user-agent default-user-agent}}]
    (let [body (read-compress-img file)
-         ua (get options :user-agent default-user-agent)
-         three-d? (get options :3d? false)
          to-final (fn [d] {:similarity (:sim d)
                            :link (:link d)
                            :meta (:meta d)})
-         min-sim (get options :min-sim 0.8)
-         url (if three-d? "https://3d.iqdb.org/" "https://iqdb.org/")
+         url (if is-three-d "https://3d.iqdb.org/" "https://iqdb.org/")
          source :iqdb
          ret (promise)]
      (assert (and (> min-sim 0) (< min-sim 1)) "min-sim should be between 0 and 1")
-     (client/post url {:async true :multipart [{:name "file" :content body}] :as :auto :headers {"User-Agent" ua}}
+     (client/post url {:async true :multipart [{:name "file" :content body}] :as :auto :headers {"User-Agent" user-agent}}
                   (fn [response]
                     (let [data (extract-iqdb-info (:body response))
                           data (filter #(>= (:sim %) min-sim) data)]
@@ -130,23 +128,23 @@
  Personally I don't recommend using this site 
  since it only return the result without similarity."
   ([file] (ascii2d file {}))
-  ([file options]
+  ([file & {:keys [is-bovw user-agent]
+            :or {is-bovw false user-agent default-user-agent}}]
    (let [body (read-compress-img file)
-         ua (get options :user-agent default-user-agent)
          url "https://ascii2d.obfs.dev/"
          append-url (fn [url path] (let [uri (java.net.URI/create url)]
                                      (str (.resolve uri path))))
-         is-bovw (get options :bovw? false)
          to-final (fn [d] {:link (get-in d [:work :link])
                            :author (:author d)})
          source :ascii2d
          ret (promise)]
-     (client/post (append-url url "/search/file") {:async true :multipart [{:name "file" :content body}] :as :auto :headers {"User-Agent" ua}}
+     (client/post (append-url url "/search/file") 
+                  {:async true :multipart [{:name "file" :content body}] :as :auto :headers {"User-Agent" user-agent}}
                   (fn [response]
                     (let [new-url (get-in response [:headers "Location"])
                           new-url (if is-bovw (s/replace-first new-url #"\/color\/" "/bovw/") new-url)]
                       (if (some? new-url)
-                        (client/get new-url {:async true :as :auto :headers {"User-Agent" ua}}
+                        (client/get new-url {:async true :as :auto :headers {"User-Agent" user-agent}}
                                     (fn [response]
                                       (let [data (extract-ascii2d-info (:body response))]
                                         (if (some? data) (deliver ret {:data {:final (map to-final data)} :source source})

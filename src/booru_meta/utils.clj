@@ -70,10 +70,10 @@
 
 (defn get-new-size
   ([old-size] (get-new-size old-size {}))
-  ([old-size options]
+  ([old-size & {:keys [new-length is-preserve-long] :or {new-length 512 is-preserve-long true}}]
    (let [[old-w old-h] old-size
-         new-l (get options :new-length 512)
-         preserve-long? (get options :preserve-long true)]
+         new-l new-length
+         preserve-long? is-preserve-long]
      (if (or (< old-w new-l) (< old-h new-l))
        old-size
        (if preserve-long?
