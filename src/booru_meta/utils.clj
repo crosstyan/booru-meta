@@ -9,7 +9,6 @@
   (:import (java.nio.file FileSystems)
            org.apache.commons.codec.binary.Hex))
 
-
 ;; okay you have to use two stars (idk why)
 (defn glob
   "See also `babashka.fs/glob`. Just a redundant implementation."

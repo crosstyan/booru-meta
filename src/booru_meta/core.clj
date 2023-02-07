@@ -18,10 +18,11 @@
 
 ;; https://stackoverflow.com/questions/6694530/executing-a-function-with-a-timeout
 (defn retry-when-error
-  "Retry when error is not nil or keyword. 
+  "Retry when error is not nil or keyword which means exception. 
+   retry three times `[500 1000 3000]`
    Should run in a go block.
    `on-error` would be called with the error."
-  [f & {:keys [on-error] :or {on-error #(constantly %)}}]
+  [f & {:keys [on-error] :or {on-error (constantly nil)}}]
   (loop [res (f)
          retry [500 1000 3000]]
     (if-let [error (:error res)]
@@ -49,8 +50,6 @@
       :relative (str (fs/relativize (fs/path root-path) (fs/path (str path))))}
      (mk-path path))))
 
-
-
 (def method-map
   {:danbooru booru/danbooru
    :sankaku booru/sankaku
@@ -59,32 +58,92 @@
    :iqdb sauce/iqdb
    :ascii2d sauce/ascii2d})
 
-(defn query-booru [& args]
-  (loop [booru-fns [booru/danbooru booru/sankaku]
+(defn value-as-key 
+"make `{:k v}` `->` `{v {:k v}}`
+ won't convert v to keyword."
+  [m k]
+  (if-let [v (get m k)]
+    (assoc {} v m)
+    {}))
+
+(defn loop-query
+  "a group of functions to query booru/sauce
+   return a seq of result"
+  [fns & args]
+  (loop [[func & rest-fns] fns
          resps []]
-    (let [[func & rest-fns] booru-fns]
-      (if (fn? func)
-        (let [res (retry-when-error #(deref (apply func args)) :on-error log/error)
-              data (:data res)]
-          (if (some? data) resps
-              (recur rest-fns (conj resps res))))
-        resps))))
+    (if (fn? func)
+      (let [res (retry-when-error #(deref (apply func args)) :on-error log/error)
+            data (:data res)]
+        (if (some? data) resps
+            (recur rest-fns (conj resps res))))
+      resps)))
+
+(defn query-booru [& args]
+  (loop-query [booru/danbooru booru/sankaku booru/yandere] args))
+
+(defn query-sauce [& args]
+  (loop-query [sauce/sauce sauce/iqdb] args))
+
+(defn categorize-results 
+  [resps]
+  (if (m/validate (m/schema [:sequential schema/result]) resps)
+    (reduce (fn [acc {:keys [data] :as resp}]
+              (if (some? data)
+                (assoc acc :data (merge (get acc :data) (value-as-key resp :data)))
+                (assoc acc :error (merge (get acc :error) (value-as-key resp :source)))))
+            {:data {} :error {}} resps)
+    {}))
+
+(defn mk-persistent-template [file & {:keys [root-path] :or {root-path nil}}]
+  (let [path (mk-path file root-path)]
+    {:data {}
+     :md5 ((comp bytes->string calc-md5) file)
+     :path path
+     :version "0.1"}))
+
+;; https://stackoverflow.com/questions/2753874/how-to-filter-a-persistent-map-in-clojure
+;; https://stackoverflow.com/questions/28408743/how-do-you-destructure-a-map-into-key-value-pairs-without-knowing-the-keys-in-cl
+;; https://stackoverflow.com/questions/1676891/mapping-a-function-on-the-values-of-a-map-in-clojure
+;; TODO: write tests. 
+(defn merge-categorized-results
+"`data` and `error` should be a map whose key is source and value is a map."
+  [{data :data error :error} & {:keys [last-data last-nomatch data-template]}]
+  (assert (not (and (nil? last-data) (nil? data-template))))
+  (let [nomatch (into {} (filter #(= :no-match (:error (val %)))) error)
+        nomatch (update-vals nomatch (constantly true))
+        new-data (if (some? last-data)
+                   (assoc last-data :data (merge (get last-data :data) data))
+                   (assoc data-template :data data))]
+    {:data new-data :error (merge last-nomatch nomatch)}))
+
+;; https://stackoverflow.com/questions/30205407/translate-encoding-of-string
+(defn read-aux-json [file]
+  (let [data-path (with-extension file ".json")
+        nomatch-path (with-extension file ".nomatch.json")
+        read-as-str (fn [file] (s/join "\n" (fs/read-all-lines file)))]
+    {:data (if (fs/exists? data-path) (-> data-path read-as-str json/decode) nil)
+     :error (if (fs/exists? nomatch-path) (-> nomatch-path read-as-str json/decode) nil)}))
+
+(defn save-aux-json [file {data :data error :error}]
+(let [data-path (with-extension file ".json")
+      nomatch-path (with-extension file ".nomatch.json")]
+  (when (seq data)
+    (fs/write-lines data-path [(json/encode data)]))
+  (when (seq error)
+    (fs/write-lines nomatch-path [(json/encode error)]))
+  nil))
 
 (defn query-save [file & {:keys [root-path] :or {root-path nil}}]
   (let [stem (file->stem file)
-        resps (query-booru stem)
-        path (mk-path file root-path)]
-    ;; (if-let [data (:data info)]
-    ;;   (let [d (merge {:data (assoc {} (:source data) data)}
-    ;;                  {:md5 ((comp bytes->string calc-md5) file)
-    ;;                   :path path
-    ;;                   :version "0.1"})]
-    ;;     (assert (m/validate schema/persistent-info d) "Invalid schema")
-    ;;     ((comp #(fs/write-lines (with-extension file ".json") [%]) json/encode) d))
-    ;;   (when (= (:error info) :no-match)
-    ;;     ((comp #(fs/write-lines (with-extension file ".nomatch.json") [%]) json/encode)
-    ;;      (assoc {} (:source info) true))))
-    ))
+        results (-> stem query-booru categorize-results)
+        {last-data :data last-nomatch :error} (read-aux-json file)
+        merged (if (some? last-data)
+                 (merge-categorized-results results :last-data last-data :last-nomatch last-nomatch)
+                 (merge-categorized-results results 
+                                            :data-template (mk-persistent-template file :root-path root-path) 
+                                            :last-nomatch last-nomatch))]
+    (save-aux-json file merged)))
 
 (defn run-batch
   [file-list handler &
