@@ -58,10 +58,13 @@
       (client/post url {:async true :multipart [{:name "file" :content body}]
                         :query-params params :as :json}
                    (fn [response]
-                     (deliver ret {:data {:final (filter #(>= (:similarity %) min-sim)
-                                                         (to-final (get-in response [:body :results])))}
-                                   :extra (to-extra (get-in response [:body :header]))
-                                   :source source}))
+                     (if-let [final
+                              (filter #(>= (:similarity %) min-sim)
+                                      (to-final (get-in response [:body :results])))]
+                       (deliver ret {:data {:final final}
+                                     :extra (to-extra (get-in response [:body :header]))
+                                     :source source})
+                       (deliver ret {:error :no-match :source source})))
                    (fn [error] (deliver ret {:error error :source source})))
       (deliver ret {:error :no-api-key}))
     ret))

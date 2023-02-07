@@ -5,7 +5,7 @@
 (def error
   (m/schema
    [:map
-    [:error :any]
+    [:error :keyword]
     [:data {:optional true} :nil]
     [:source :keyword]]))
 
@@ -82,7 +82,11 @@
   "schema for v0.1"
   (m/schema
    [:map
-    [:data [:sequential result]]
+    [:data [:map-of :keyword result]]
     [:path path]
     [:md5 :string]
     [:version :string]]))
+
+(def no-match
+  (m/schema
+   [:map-of :keyword :boolean]))

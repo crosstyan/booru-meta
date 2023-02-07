@@ -22,6 +22,8 @@
                  [org.clojure/tools.cli "1.0.214"]
                  [clojupyter "0.3.6"]
                  [clojure-term-colors "0.1.0"]
+                 [listora/again "1.0.0"]
+                 [dev.brachtendorf/JImageHash "1.0.0"]
                  [metosin/malli "0.10.1"]
                  ;; can't decide which one to use
                  ;; I'll take malli for now
