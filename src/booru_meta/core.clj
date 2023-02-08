@@ -82,7 +82,7 @@
       resps)))
 
 (defn query-booru [args]
-  (loop-query [booru/danbooru booru/sankaku booru/yandere] args))
+  (loop-query [booru/danbooru booru/sankaku] args))
 
 (defn query-sauce [args]
   (loop-query [sauce/iqdb #(sauce/sauce % {:api-key "009934e06a88a3a1f28c565d69a5273ee47008e1"})] args))
@@ -95,7 +95,8 @@
                 (assoc acc :data (merge (get acc :data) (value-as-key resp :source)))
                 (assoc acc :error (merge (get acc :error) (value-as-key resp :source)))))
             {:data {} :error {}} resps)
-    {}))
+    (do (log/warn "Invalid result" resps)
+      {})))
 
 (defn mk-persistent-template [file & {:keys [root-path] :or {root-path nil}}]
   (let [path (mk-path file root-path)]
@@ -170,6 +171,7 @@
       (a/put! failed-chan file))
     (save-results file results :root-path root-path)))
 
+;; TODO: fix no match is not saved.
 (defn query-by-file-then-save
   "query sauce by file. save result to json file."
   [file & {:keys [root-path]

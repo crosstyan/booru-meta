@@ -74,13 +74,14 @@
 
 (def s0' @(iqdb (io/file "C:\\Users\\cross\\Desktop\\mt_o\\ArtistsNoEmb\\ruriri\\2rnc9_17.jpg")))
 
-s0'
+(m/explain schema/result s0')
 
 @(danbooru "1ede42428758e996b8a9d6fb757a1974")
 
 (query-by-md5-then-save (io/file "C:\\Users\\cross\\Desktop\\mt_o\\Artists\\holy_pumpkin\\1ede42428758e996b8a9d6fb757a1974.jpg"))
 (query-by-file-then-save  (io/file "C:\\Users\\cross\\Desktop\\27252276_p0.jpg"))
 
+(query-by-file-then-save (io/file "C:\\Users\\cross\\Desktop\\mt_o\\ArtistsNoEmb\\ruriri\\2rnc9_17.jpg"))
 
 s1
 
@@ -108,10 +109,16 @@ s3
 ;;     (calc-md5)
 ;;     (bytes->string))
 
+(defn filter-out-nomatch [file]
+  (not (fs/exists? (with-extension file ".nomatch.json"))))
+
+(defn filter-out-matched [file]
+  (not (fs/exists? (with-extension file ".json"))))
+
 (def cancel
-  (let [file-list (shuffle (glob (io/file "C:\\Users\\cross\\Desktop\\mt_o\\ArtistsNoEmb\\ruriri") image-glob-pattern)) 
+  (let [file-list (filter filter-out-matched (shuffle (glob (io/file "C:\\Users\\cross\\Desktop\\mt_o\\ArtistsNoEmb\\ruriri") image-glob-pattern)))
         {cancel :cancel failed-chan :failed-chan bar-chan :bar-chan}
-        (run-batch file-list query-by-md5-then-save :max-limit 30 :reset-interval-ms 25000 :root-path "C:\\Users\\cross\\Desktop\\mt_o\\" :random-delay-ms [100 400])]
+        (run-batch file-list query-by-file-then-save :max-limit 30 :reset-interval-ms 25000 :root-path "C:\\Users\\cross\\Desktop\\mt_o\\" :random-delay-ms [100 400])]
     (a/go-loop []
       (pr/print (a/<! bar-chan))
       (recur))

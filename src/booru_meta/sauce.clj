@@ -110,7 +110,9 @@
                   (fn [response]
                     (let [data (extract-iqdb-info (:body response))
                           data (filter #(>= (:sim %) min-sim) data)]
-                      (deliver ret (if (seq data) {:data {:final (map to-final data)} :source source} {:error :no-match}))))
+                      (deliver ret (if (seq data)
+                                     {:data {:final (map to-final data)} :source source}
+                                     {:error :no-match :source source}))))
                   (fn [error] (deliver ret {:error error :source source})))
      ret)))
 
