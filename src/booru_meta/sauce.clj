@@ -60,8 +60,8 @@
                         :query-params params :as :json}
                    (fn [response]
                      (if-let [final
-                              (filter #(>= (:similarity %) min-sim)
-                                      (to-final (get-in response [:body :results])))]
+                              (seq (filter #(>= (:similarity %) min-sim)
+                                           (to-final (get-in response [:body :results]))))]
                        (deliver ret {:data {:final final}
                                      :extra (to-extra (get-in response [:body :header]))
                                      :source source})
@@ -69,6 +69,7 @@
                    (fn [error] (deliver ret {:error error :source source})))
       (deliver ret {:error :no-api-key}))
     ret))
+
 
 ;; iqdb will return a html page. Need to parse it.
 ;; Hickory Tips: you can't match a list. Have to use `map` or `first`.
@@ -109,7 +110,7 @@
                   (fn [response]
                     (let [data (extract-iqdb-info (:body response))
                           data (filter #(>= (:sim %) min-sim) data)]
-                      (deliver ret (if (some? data) {:data {:final (map to-final data)} :source source} {:error :no-match}))))
+                      (deliver ret (if (seq data) {:data {:final (map to-final data)} :source source} {:error :no-match}))))
                   (fn [error] (deliver ret {:error error :source source})))
      ret)))
 
@@ -142,7 +143,7 @@
                            :author (:author d)})
          source :ascii2d
          ret (promise)]
-     (client/post (append-url url "/search/file") 
+     (client/post (append-url url "/search/file")
                   {:async true :multipart [{:name "file" :content body}] :as :auto :headers {"User-Agent" user-agent}}
                   (fn [response]
                     (let [new-url (get-in response [:headers "Location"])
@@ -150,7 +151,7 @@
                       (if (some? new-url)
                         (client/get new-url {:async true :as :auto :headers {"User-Agent" user-agent}}
                                     (fn [response]
-                                      (if-let [data (extract-ascii2d-info (:body response))]
+                                      (if-let [data (seq (extract-ascii2d-info (:body response)))]
                                         (deliver ret {:data {:final (map to-final data)} :source source})
                                         (deliver ret {:error :no-match :source source})))
                                     (fn [error] (deliver ret {:error error :source source})))
