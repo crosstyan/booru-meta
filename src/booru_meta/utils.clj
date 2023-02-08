@@ -191,3 +191,7 @@
 (defn map->query [m]
   (let [query (map (fn [[k v]] (str (name k) ":" v)) m)]
     (s/join " " query)))
+
+(def chan-type (type (a/chan)))
+(defn chan? [x]
+  (instance? chan-type x))

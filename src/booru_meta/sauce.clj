@@ -37,6 +37,7 @@
         to-final' (fn [result]
                     {:similarity (/ (Float/parseFloat (get-in result [:header :similarity])) 100)
                      :link (get-in result [:data :ext_urls 0])
+                     :links (get-in result [:data :ext_urls])
                      :author {:name (first (filter some?
                                                    [(get-in result [:data :member_login_name])
                                                     (get-in result [:data :creator])]))}

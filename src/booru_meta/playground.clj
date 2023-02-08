@@ -55,7 +55,7 @@
 (sankaku "f6f3fc979c1609372e491d101ba51f09")
 @(danbooru "f6f3fc979c1609372e491d101ba51f09")
 
-@(danbooru {:pixiv 8314} {:custom-query true})
+@(danbooru {:pixiv 8314} {:is-custom true})
 @(danbooru "0c0d79e53b5e50c568baea759194476a")
 
 ;; pay attention to short_remaining and long_remaining
@@ -72,13 +72,26 @@
 
 (def s3 @(ascii2d (io/file "C:\\Users\\cross\\Desktop\\mt_o\\Artists\\holy_pumpkin\\1ede42428758e996b8a9d6fb757a1974.jpg")))
 
+@(danbooru "1ede42428758e996b8a9d6fb757a1974")
+
+(query-by-md5-then-save (io/file "C:\\Users\\cross\\Desktop\\mt_o\\Artists\\holy_pumpkin\\1ede42428758e996b8a9d6fb757a1974.jpg"))
+(query-by-file-then-save  (io/file "C:\\Users\\cross\\Desktop\\27252276_p0.jpg"))
+
+
+s1
+
+(map #(deref (%)) [(sauce->booru s0)])
+
+(map #(if (empty? (:links %)) (:link %) (:links %)) (get-in s1 [:data :final])) 
+
 s3
 
 (link->source "https://danbooru.donmai.us/posts/3243061")
 (link->source "https://www.pixiv.net/artworks/70534730")
 (link->source "https://www.pixiv.net/member_illust.php?mode=medium&illust_id=70534730")
 
-(def f (sauce->booru s3)) 
+
+(def f (sauce->booru s1)) 
 
 (if (fn? f) @(f) f)
 

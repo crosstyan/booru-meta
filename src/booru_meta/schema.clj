@@ -54,6 +54,8 @@
   (let [final
         (m/schema [:map
                    [:link :string]
+                   ;; for sauceNAO
+                   [:links {:optional true} [:sequential :string]]
                    [:similarity {:min 0 :max 1} float?]
                    [:meta {:optional true} :map]
                    [:author {:optional true}
@@ -84,6 +86,7 @@
    [:map
     [:data [:map-of :keyword result]]
     [:path path]
+    [:embedding {:optional true} :string]
     [:md5 :string]
     [:version :string]]))
 

@@ -51,16 +51,15 @@
   }
 ```
    "
-  [& {:keys [url user-agent param preprocess source] 
+  [& {:keys [url user-agent param preprocess name] 
       :or {user-agent default-user-agent}}]
-  (let [
-        header {"User-Agent" user-agent}
+  (let [header {"User-Agent" user-agent}
         ret (promise)]
     (client/get url {:headers header :content-type :json :as :json :query-params param :async true}
                 (fn [res] (let [processed (preprocess (:body res))
-                                wrapped (merge processed {:source source})]
+                                wrapped (merge processed {:source name})]
                             (deliver ret wrapped)))
-                (fn [err] (deliver ret {:source source :error err})))
+                (fn [err] (deliver ret {:source name :error err})))
     ret))
 
 (defn danbooru
@@ -196,18 +195,18 @@
   [result]
   (if (m/validate schema/sauce-result result)
     (let [f (get-in result [:data :final])
-          l (map #(assoc % :src (link->source (:link %))) f)
-          l' (filter #(some? (:src %)) l)
+          l (map #(if (empty? (:links %)) (:link %) (:links %)) f)
+          l' (map link->source (flatten l)) 
+          l'' (filter some? l')
           ;; I assume the result is sorted
-          r (first l')
-          s (get-in r [:src :source])
-          id (get-in r [:src :id])]
+          r (first l'')
+          s (:source r)
+          id (:id r)]
       (if (some? id)
         (cond (= s :danbooru) #(danbooru id)
               (= s :sankaku) #(sankaku id)
               (= s :yandere) #(yandere id)
-              (= s :pixiv) #(danbooru {:pixiv id} {:custom-query true})
+              (= s :pixiv) #(danbooru {:pixiv id} {:is-custom true})
               :else :no-match)
         :no-match))
     :invalid-sauce))
-
