@@ -205,10 +205,11 @@
         reset-limit #(reset! % 0)
         cancel (interval reset-limit [short-limit] reset-interval-ms)
         flag (atom true)
+        failed-chan (a/chan 20)
         bar (atom (pr/progress-bar (count file-list)))
         bar-chan (a/chan 10)
         action (fn [file]
-                 (handler file :root-path root-path)
+                 (handler file :root-path root-path :failed-chan failed-chan)
                  (swap! bar pr/tick)
                  (a/put! bar-chan @bar))]
     (assert (fn? handler) "handler should be a function")
@@ -223,7 +224,8 @@
                 (action file))))))
     {:cancel #(do (cancel)
                   (reset! flag false))
-     :bar-chan bar-chan}))
+     :bar-chan bar-chan
+     :failed-chan failed-chan}))
 
 (def args-opts
   [["-i" "--input PATH" "Root path of images"
