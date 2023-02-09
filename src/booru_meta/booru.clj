@@ -54,12 +54,12 @@
   [& {:keys [url user-agent param preprocess name] 
       :or {user-agent default-user-agent}}]
   (let [header {"User-Agent" user-agent}
-        ret (promise)]
+        ret (a/promise-chan)]
     (client/get url {:headers header :content-type :json :as :json :query-params param :async true}
                 (fn [res] (let [processed (preprocess (:body res))
                                 wrapped (merge processed {:source name})]
-                            (deliver ret wrapped)))
-                (fn [err] (deliver ret {:source name :error err})))
+                            (a/>!! ret wrapped)))
+                (fn [err] (a/>!! ret {:source name :error err})))
     ret))
 
 (defn danbooru

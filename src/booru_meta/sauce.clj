@@ -14,18 +14,12 @@
    }
   ```
    "
-  (:require [babashka.fs :as fs]
-            [clojure.java.io :as io]
-            [typed.clojure :as t]
+  (:require [bites.core]
             [clj-http.client :as client]
+            [clojure.core.async :as a]
             [clojure.string :as s]
-            [hickory.select :as hs]
             [hickory.core :as html]
-            [bites.core]
-            [malli.core :as m]
-            [booru-meta.schema :as schema])
-  (:import (java.nio.file FileSystems)
-           org.apache.commons.codec.binary.Hex)
+            [hickory.select :as hs])
   (:use [booru-meta.utils]
         [booru-meta.common]))
 
@@ -48,7 +42,7 @@
                     :long-remaining (:long_remaining header)
                     :short-limit (:short_limit header)
                     :long-limit (:long_limit header)})
-        ret (promise)
+        ret (a/promise-chan)
         url "https://saucenao.com/search.php"
         source :saucenao
         params {:output_type 2
@@ -62,12 +56,12 @@
                      (if-let [final
                               (seq (filter #(>= (:similarity %) min-sim)
                                            (to-final (get-in response [:body :results]))))]
-                       (deliver ret {:data {:final final}
+                       (a/>!! ret {:data {:final final}
                                      :extra (to-extra (get-in response [:body :header]))
                                      :source source})
-                       (deliver ret {:error :no-match :source source})))
+                       (a/>!! ret {:error :no-match :source source})))
                    (fn [error] (deliver ret {:error error :source source})))
-      (deliver ret {:error :no-api-key}))
+      (a/>!! ret {:error :no-api-key}))
     ret))
 
 
@@ -104,16 +98,16 @@
                            :meta (:meta d)})
          url (if is-three-d "https://3d.iqdb.org/" "https://iqdb.org/")
          source :iqdb
-         ret (promise)]
+         ret (a/promise-chan)]
      (assert (and (> min-sim 0) (< min-sim 1)) "min-sim should be between 0 and 1")
      (client/post url {:async true :multipart [{:name "file" :content body}] :as :auto :headers {"User-Agent" user-agent}}
                   (fn [response]
                     (let [data (extract-iqdb-info (:body response))
                           data (filter #(>= (:sim %) min-sim) data)]
-                      (deliver ret (if (seq data)
+                      (a/>!! ret (if (seq data)
                                      {:data {:final (map to-final data)} :source source}
                                      {:error :no-match :source source}))))
-                  (fn [error] (deliver ret {:error error :source source})))
+                  (fn [error] (a/>!! ret {:error error :source source})))
      ret)))
 
 
@@ -144,7 +138,7 @@
          to-final (fn [d] {:link (get-in d [:work :link])
                            :author (:author d)})
          source :ascii2d
-         ret (promise)]
+         ret (a/promise-chan)]
      (client/post (append-url url "/search/file")
                   {:async true :multipart [{:name "file" :content body}] :as :auto :headers {"User-Agent" user-agent}}
                   (fn [response]
@@ -157,6 +151,6 @@
                                         (deliver ret {:data {:final (map to-final data)} :source source})
                                         (deliver ret {:error :no-match :source source})))
                                     (fn [error] (deliver ret {:error error :source source})))
-                        (deliver ret {:error :no-match :source source}))))
-                  (fn [error] (deliver ret {:error error :source source})))
+                        (a/>!! ret {:error :no-match :source source}))))
+                  (fn [error] (a/>!! ret {:error error :source source})))
      ret)))
