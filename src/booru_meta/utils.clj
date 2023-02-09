@@ -95,6 +95,7 @@
 ;; TODO: convert it to rgb then compresses it to jpeg
 ;; https://stackoverflow.com/questions/44182400/how-to-convert-bufferedimage-rgba-to-bufferedimage-rgb
 ;; https://github.com/mikera/imagez/issues/33
+;; TODO: make this function async (run in another thread)
 (defn read-compress-img
   "Read a file and compress it with its short side 512 to png format.
 
