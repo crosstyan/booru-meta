@@ -119,11 +119,13 @@ s3
   (let [file "C:\\Users\\cross\\Desktop\\mt_o\\Artists\\luicent\\4043c08ebed607e621b82ec7fdb49413.json"]
     (-> file str slurp json/decode walk/keywordize-keys)))
 
-(def files (:md5 (categorize-by-md5 (shuffle (glob (io/file "C:\\Users\\cross\\Desktop\\mt_o\\Artists") image-glob-pattern)))))
-(def files (filter filter-out-matched files))
-(def files (filter filter-out-nomatch files))
-(def ng-folders ["PVC" "orange@aigc" "kantoku@sketch" "wlop" "53928"])
-(def files (filter #(filter-out-folders % ng-folders) files))
+(def files (let [files (:md5 (categorize-by-md5 (shuffle (glob (io/file "C:\\Users\\cross\\Desktop\\mt_o\\Artists") image-glob-pattern))))
+                 files (filter filter-out-matched files)
+                 files (filter filter-out-nomatch files)
+                 ng-folders ["PVC" "orange@aigc" "kantoku@sketch" "wlop" "53928"]
+                 files (filter #(filter-out-folders % ng-folders) files)]
+             files))
+
 (count files)
 
 

@@ -250,7 +250,7 @@
          random-delay-ms [0 100]}}]
   (let [short-limit (atom 0)
         reset-limit #(reset! % 0)
-        ;; cancel (interval reset-limit [short-limit] reset-interval-ms)
+        cancel (interval reset-limit [short-limit] reset-interval-ms)
         flag (atom true)
         failed-chan (chan 4096)
         bar (atom (pr/progress-bar (count file-list)))
@@ -263,10 +263,14 @@
     (doseq [file file-list]
       ;; skip when json file exists
       (go-loop []
-        (do (<! (timeout (apply rand-int-range random-delay-ms)))
-            (swap! short-limit inc)
-            (action file))))
-    {:cancel #(do (reset! flag false))
+        (when @flag
+          (if (>= @short-limit max-limit)
+            (do (<! (a/timeout 500)) (recur))
+            (do (<! (timeout (apply rand-int-range random-delay-ms)))
+                (swap! short-limit inc)
+                (action file))))))
+    {:cancel #(do (cancel)
+                  (reset! flag false))
      :bar-chan bar-chan
      :failed-chan failed-chan}))
 

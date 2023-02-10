@@ -52,8 +52,9 @@
                     :testmode 0}]
         (assert (and (> min-sim 0) (< min-sim 1)) "min-sim should be between 0 and 1")
         (if (some? api-key)
-          (client/post url {:async true :multipart [{:name "file" :content body}]
-                            :query-params params :as :json}
+          (client/post url (merge proxy-options
+                                  {:async true :multipart [{:name "file" :content body}]
+                                   :query-params params :as :json}) 
                        (fn [response]
                          (if-let [final
                                   (seq (filter #(>= (:similarity %) min-sim)
@@ -103,7 +104,9 @@
              source :iqdb
              ret (a/promise-chan)]
          (assert (and (> min-sim 0) (< min-sim 1)) "min-sim should be between 0 and 1")
-         (client/post url {:async true :multipart [{:name "file" :content body}] :as :auto :headers {"User-Agent" user-agent}}
+         (client/post url (merge proxy-options
+                                 {:async true :multipart [{:name "file" :content body}]
+                                  :as :auto :headers {"User-Agent" user-agent}}) 
                       (fn [response]
                         (let [data (extract-iqdb-info (:body response))
                               data (filter #(>= (:sim %) min-sim) data)]
@@ -144,12 +147,16 @@
              source :ascii2d
              ret (a/promise-chan)]
          (client/post (append-url url "/search/file")
-                      {:async true :multipart [{:name "file" :content body}] :as :auto :headers {"User-Agent" user-agent}}
+                      (merge proxy-options
+                             {:async true :multipart [{:name "file" :content body}]
+                              :as :auto :headers {"User-Agent" user-agent}})
                       (fn [response]
                         (let [new-url (get-in response [:headers "Location"])
                               new-url (if is-bovw (s/replace-first new-url #"\/color\/" "/bovw/") new-url)]
                           (if (some? new-url)
-                            (client/get new-url {:async true :as :auto :headers {"User-Agent" user-agent}}
+                            (client/get new-url (merge proxy-options
+                                                       {:async true :as :auto
+                                                        :headers {"User-Agent" user-agent}})
                                         (fn [response]
                                           (if-let [data (seq (extract-ascii2d-info (:body response)))]
                                             (deliver ret {:data {:final (map to-final data)} :source source})

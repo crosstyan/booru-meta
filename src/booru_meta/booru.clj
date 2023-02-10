@@ -55,7 +55,8 @@
       :or {user-agent default-user-agent}}]
   (let [header {"User-Agent" user-agent}
         ret (a/promise-chan)]
-    (client/get url {:headers header :content-type :json :as :json :query-params param :async true}
+    (client/get url (merge proxy-options
+                           {:headers header :content-type :json :as :json :query-params param :async true}) 
                 (fn [res] (let [processed (preprocess (:body res))
                                 wrapped (merge processed {:source name})]
                             (a/>!! ret wrapped)))

@@ -1,6 +1,7 @@
 (ns booru-meta.common
   (:require [malli.core :as m]
-            [malli.util :as mu])
+            [malli.util :as mu]
+            [clj-http.conn-mgr :as conn-mgr])
   (:use [clojure.core.async :only [chan >!! close!]])
   (:import [java.util.concurrent Executors Executor]
            [clojure.lang Var]))
@@ -35,3 +36,8 @@
   "Copy and pasted from `clojure.core.async."
   [& body]
   `(image-thread-call (^:once fn* [] ~@body)))
+
+;; https://github.com/dakrone/clj-http#proxies
+(defonce 
+  proxy-options 
+  {:proxy-host "127.0.0.1" :proxy-port 36000})
