@@ -14,7 +14,9 @@
             [booru-meta.sauce :as sauce]
             [again.core :as again]
             [clojure.walk :as walk])
-  (:use [booru-meta.utils])
+  (:use [booru-meta.utils]
+        [booru-meta.common]
+        [clojure.core.async :only [go go-loop <! >! timeout chan]])
   (:gen-class))
 
 ;; https://stackoverflow.com/questions/6694530/executing-a-function-with-a-timeout
@@ -27,12 +29,12 @@
    retry three times `[500 1000 3000]`
    `on-error` would be called with the error."
   [f & {:keys [on-error] :or {on-error (constantly nil)}}]
-  (a/go-loop [chan (f)
-              retry [500 1000 3000]]
-    (let [res (if (chan? chan) (a/<! chan) chan)]
+  (go-loop [chan (f)
+            retry [500 1000 3000]]
+    (let [res (if (chan? chan) (<! chan) chan)]
       (if-let [error (:error res)]
         (if (and (some? (first retry)) (not (keyword? error)))
-          (do (a/<! (a/timeout (first retry)))
+          (do (<! (timeout (first retry)))
               (on-error error)
               (recur (f) (rest retry)))
           res)
@@ -78,10 +80,10 @@
    a group of functions to query booru/sauce
    return a seq of result"
   [fns & args]
-  (a/go-loop [[func & rest-fns] fns
-              resps []]
+  (go-loop [[func & rest-fns] fns
+            resps []]
     (if (fn? func)
-      (let [res (a/<! (retry-when-error #(apply func args) :on-error #(log/error %)))
+      (let [res (<! (retry-when-error #(apply func args) :on-error #(log/error %)))
             data (:data res)]
         (if (some? data) (conj resps res)
             (recur rest-fns (conj resps res))))
@@ -111,6 +113,14 @@
      :md5 ((comp bytes->string calc-md5) file)
      :path path
      :version "0.1"}))
+
+(defn async-mk-persistent-template [file & {:keys [root-path] :or {root-path nil}}]
+  (go (let [path (mk-path file root-path)
+            md5 (<! (a/thread (calc-md5 file)))]
+        {:data {}
+         :md5 md5
+         :path path
+         :version "0.1"})))
 
 
 ;; https://stackoverflow.com/questions/2753874/how-to-filter-a-persistent-map-in-clojure
@@ -152,14 +162,14 @@
       (spit (str nomatch-path)  (json/encode error)))
     nil))
 
-(defn save-results [file results & {:keys [root-path] :or {root-path nil}}]
-  (let [{last-data :data last-nomatch :error} (read-aux-json file)
-        merged (if (some? last-data)
-                 (merge-categorized-results results :last-data last-data :last-nomatch last-nomatch)
-                 (merge-categorized-results results
-                                            :data-template (mk-persistent-template file :root-path root-path)
-                                            :last-nomatch last-nomatch))]
-    (save-aux-json file merged)))
+(defn async-save-results [file results & {:keys [root-path] :or {root-path nil}}]
+  (go (let [{last-data :data last-nomatch :error} (read-aux-json file)
+            merged (if (some? last-data)
+                     (merge-categorized-results results :last-data last-data :last-nomatch last-nomatch)
+                     (merge-categorized-results results
+                                                :data-template (<! (async-mk-persistent-template file :root-path root-path))
+                                                :last-nomatch last-nomatch))]
+        (<! (a/thread (save-aux-json file merged))))))
 
 (defn query-by-md5-then-save
   "Return a channel that will send result
@@ -170,15 +180,16 @@
    an optional `failed-chan` can be passed to send failed file to it."
   [file & {:keys [root-path force-calc-md5 failed-chan]
            :or {root-path nil force-calc-md5 false}}]
-  (a/go (let [query (if force-calc-md5
-                      ((comp bytes->string calc-md5) file)
-                      (#(if (md5? (file->stem %))
-                          (file->stem %) ((comp bytes->string calc-md5) %)) file))
-              results (-> query query-booru a/<! categorize-results)]
-          (when (and (chan? failed-chan) (empty? (:data results)))
-            (a/put! failed-chan file))
-          (do (save-results file results :root-path root-path)
-              results))))
+  (go (let [stem (file->stem file)
+            query (if force-calc-md5
+                    (bytes->string (<! (a/thread (calc-md5 file))))
+                    (if (md5? stem) stem
+                        (bytes->string (<! (a/thread (calc-md5 file))))))
+            results (-> query query-booru <! categorize-results)]
+        (when (and (chan? failed-chan) (empty? (:data results)))
+          (a/put! failed-chan file))
+        (<! (async-save-results file results :root-path root-path))
+        results)))
 
 ;; TODO: fix no match is not saved.
 (defn query-by-file-then-save
@@ -187,35 +198,45 @@
    query sauce by file. save result to json file."
   [file & {:keys [root-path]
            :or {root-path nil}}]
-  (a/go (let [sauce-results  (-> file query-sauce a/<!  categorize-results)
-              {sauce-sucess :data sauce-error :error} sauce-results]
-          (if (seq sauce-sucess)
-            (let [maybe-fns (map booru/sauce->booru (vals sauce-sucess))
-                  fns (filter fn? maybe-fns)
-                  chans (map #(let [res (retry-when-error %)] res) fns)
+  (go (let [compressed (<! (image-thread (read-compress-img file)))
+            sauce-results  (-> compressed query-sauce <!  categorize-results)
+            {sauce-sucess :data sauce-error :error} sauce-results]
+        (if (seq sauce-sucess)
+          (let [maybe-fns (map booru/sauce->booru (vals sauce-sucess))
+                fns (filter #(fn? (:func %)) maybe-fns)
+                chans (map #(let [res (retry-when-error (:func %))] res) fns)
                   ;; how do I use map to get the result from channel?
-                  rs (a/go-loop [[c cs] chans
-                                 resps []]
-                       (if (chan? c)
-                         (let [resp (a/<! c)]
-                           (recur cs (conj resps resp)))
-                         resps))
-                  {booru-sucess :data booru-error :error}
-                  (categorize-results (a/<! rs))
-                  results {:data (merge sauce-sucess booru-sucess)
-                           :error (merge sauce-error booru-error)}]
-              (do (save-results file results :root-path root-path)
-                  results))
-            (do (save-results file sauce-results :root-path root-path)
-                sauce-results)))))
+                rs (go-loop [[c cs] chans
+                             resps []]
+                     (if (chan? c)
+                       (let [resp (<! c)]
+                         (recur cs (conj resps resp)))
+                       resps))
+                {booru-sucess :data booru-error :error}
+                (categorize-results (<! rs))
+                results {:data (merge sauce-sucess booru-sucess)
+                         :error (merge sauce-error booru-error)}]
+            (do (<! (async-save-results file results :root-path root-path))
+                results))
+          (do (<! (async-save-results file sauce-results :root-path root-path))
+              sauce-results)))))
+
+(defn query-sauce-2-booru-then-save
+  "`func` is the function generated by `sauce->booru`"
+  [file func & {:keys [root-path] :or {root-path nil}}]
+  (go (let [chan (func)
+            booru-result (<! chan)
+            booru-result (categorize-results [booru-result])]
+        (<! (async-save-results file booru-result :root-path root-path))
+        booru-result)))
 
 (defn query-sauce-for-fails
   "query sauce for failed files. Use with `query-by-md5-then-save` and
 `run-batch`."
   [failed-chan]
-  (a/go-loop []
-    (let [file (a/<! failed-chan)]
-      (a/<! (query-by-file-then-save file))
+  (go-loop []
+    (let [file (<! failed-chan)]
+      (<! (query-by-file-then-save file))
       (recur))))
 
 (defn run-batch
@@ -230,18 +251,18 @@
         reset-limit #(reset! % 0)
         ;; cancel (interval reset-limit [short-limit] reset-interval-ms)
         flag (atom true)
-        failed-chan (a/chan 4096)
+        failed-chan (chan 4096)
         bar (atom (pr/progress-bar (count file-list)))
-        bar-chan (a/chan 4096)
+        bar-chan (chan 4096)
         action (fn [file]
-                 (a/go (let [_ (a/<! (handler file :root-path root-path :failed-chan failed-chan))]
-                         (swap! bar pr/tick)
-                         (a/put! bar-chan @bar))))]
+                 (go (let [_ (<! (handler file :root-path root-path :failed-chan failed-chan))]
+                       (swap! bar pr/tick)
+                       (a/put! bar-chan @bar))))]
     (assert (fn? handler) "handler should be a function")
     (doseq [file file-list]
       ;; skip when json file exists
-      (a/go-loop []
-        (do (a/<! (a/timeout (apply rand-int-range random-delay-ms)))
+      (go-loop []
+        (do (<! (timeout (apply rand-int-range random-delay-ms)))
             (swap! short-limit inc)
             (action file))))
     {:cancel #(do (reset! flag false))

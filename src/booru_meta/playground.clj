@@ -5,8 +5,12 @@
             [booru-meta.schema :as schema]
             [clojure.core.async :as a]
             [clojure.java.io :as io]
+            [clojure.walk :as walk]
+            [java-time.api :as jt]
             [malli.core :as m]
-            [progrock.core :as pr])
+            [progrock.core :as pr]
+            [cheshire.core :as json]
+            [booru-meta.booru :as booru])
   (:use [booru-meta.utils]
         [booru-meta.sauce]
         [booru-meta.booru]
@@ -86,7 +90,6 @@
 
 s1
 
-(map #(deref (%)) [(sauce->booru s0)])
 
 (map #(if (empty? (:links %)) (:link %) (:links %)) (get-in s1 [:data :final]))
 
@@ -99,7 +102,7 @@ s3
 
 (def f (sauce->booru s1))
 
-(if (fn? f) @(f) f)
+;; (if (fn? f) @(f) f)
 
 (m/validate schema/sauce-result s3)
 
@@ -110,18 +113,61 @@ s3
 ;;     (calc-md5)
 ;;     (bytes->string))
 
-(defn filter-out-nomatch [file]
-  (not (fs/exists? (with-extension file ".nomatch.json"))))
 
-(defn filter-out-matched [file]
-  (not (fs/exists? (with-extension file ".json"))))
 
-(def files (:md5 (categorize-by-md5 (filter filter-out-matched (shuffle (glob (io/file "C:\\Users\\cross\\Desktop\\mt_o\\Artists\\") image-glob-pattern))))))
+(def f
+  (let [file "C:\\Users\\cross\\Desktop\\mt_o\\Artists\\luicent\\4043c08ebed607e621b82ec7fdb49413.json"]
+    (-> file str slurp json/decode walk/keywordize-keys)))
 
-;; files io/compress files/calculate md5 must be done in a separate thread
+(def files (:md5 (categorize-by-md5 (shuffle (glob (io/file "C:\\Users\\cross\\Desktop\\mt_o\\Artists") image-glob-pattern)))))
+(def files (filter filter-out-matched files))
+(def files (filter filter-out-nomatch files))
+(def ng-folders ["PVC" "orange@aigc" "kantoku@sketch" "wlop" "53928"])
+(def files (filter #(filter-out-folders % ng-folders) files))
+
+
+(def files (filter get-sauced-no-booru files))
+(def queries (map get-sauce-query files))
+(def fq (map vector files queries))
+(first fq)
+
+(count files)
+(first files)
+;; (nth files 1)
+
+(first queries)
+
+(count fq)
+
+(def r (atom nil))
+(a/take! ((:func (first queries))) #(do (reset! r %)
+                                        (println "done" %)))
+
+(a/take! (query-sauce-2-booru-then-save (first files) (:func (first queries)))
+         #(do (reset! r %)
+              (println "done" %)))
+@r
+
+
+(doseq [[file query] fq]
+  (let [func (:func query)]
+    (if (fn? func)
+      (a/take! (query-sauce-2-booru-then-save file func)
+               (fn [res]
+                 (println "done" (str file) (true? (seq res)))))
+      (println "not a function" (str file) (str queries)))))
+
+(doseq [a [1 2 3 4 5 6 7 8 9 10]
+        b ["a" "b" "c" "d" "e" "f" "g" "h" "i" "j"]]
+  (println a b))
+
+(map vector [1 2 3 4 5 6 7 8 9 10] ["a" "b" "c" "d" "e" "f" "g" "h" "i" "j"])
+
 files
 (count files)
 
+
+;; https://stackoverflow.com/questions/11824134/caused-by-java-lang-outofmemoryerror-java-heap-space
 (def cancel
   (let [file-list files
         {cancel :cancel failed-chan :failed-chan bar-chan :bar-chan}
@@ -142,3 +188,26 @@ files
 (cancel)
 
 (take 1000 (filter filter-out-matched (shuffle (fs/glob (io/file "C:\\Users\\cross\\Desktop\\mt_o\\Artists\\") image-glob-pattern))))
+
+
+(def last-mod (fs/last-modified-time "C:\\Users\\cross\\Desktop\\mt_o\\ArtistsNoEmb\\niliu_chahui\\1c1159645ffb56448bfb7cfea0ded6e7.json"))
+
+
+
+
+
+(def expected-time  (jt/minus (jt/instant) (jt/minutes 45)))
+
+(jt/after?  (.toInstant last-mod) expected-time)
+
+(defn take-only-after [file]
+  (let [last-mod (fs/last-modified-time file)]
+    (jt/after?  (.toInstant last-mod) expected-time)))
+
+(def files (fs/glob (io/file "C:\\Users\\cross\\Desktop\\mt_o\\ArtistsNoEmb\\") "**.json"))
+
+(def filtered (filter take-only-after files))
+(count filtered)
+
+(doseq [file filtered]
+  (fs/delete-if-exists file))

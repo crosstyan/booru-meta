@@ -2,15 +2,15 @@
   "Get metadata from booru sites.
  I only plan to support one image query by md5 or post id (Maybe pixiv pid too).
 "
-  (:require [typed.clojure :as t]
-            [clj-http.client :as client]
-            [clojure.string :as s]
+  (:require [babashka.fs :as fs]
             [bites.core]
+            [booru-meta.schema :as schema]
+            [cheshire.core :as json]
+            [clj-http.client :as client]
             [clojure.core.async :as a]
-            [malli.core :as m]
-            [booru-meta.schema :as schema])
-  (:import (java.nio.file FileSystems)
-           org.apache.commons.codec.binary.Hex)
+            [clojure.string :as s]
+            [clojure.walk :as walk]
+            [malli.core :as m])
   (:use [booru-meta.utils]
         [booru-meta.common]))
 
@@ -203,10 +203,21 @@
           s (:source r)
           id (:id r)]
       (if (some? id)
-        (cond (= s :danbooru) #(danbooru id)
-              (= s :sankaku) #(sankaku id)
-              (= s :yandere) #(yandere id)
-              (= s :pixiv) #(danbooru {:pixiv id} {:is-custom true})
-              :else :no-match)
-        :no-match))
-    :invalid-sauce))
+        (cond (= s :danbooru) {:func #(danbooru id) :args [s id]}
+              (= s :sankaku) {:func #(sankaku id) :args [s id]} 
+              (= s :yandere) {:func #(yandere id) :args [s id]} 
+              (= s :pixiv) {:func #(danbooru {:pixiv id} {:is-custom true}) :args [s id]} 
+              :else {:error :no-match})
+        {:error :no-match}))
+    {:error :invalid-sauce}))
+
+(defn get-sauce-query
+  [file]
+  (let [file (with-extension file ".json")]
+    (if (fs/exists? file)
+      (let [c (-> file str slurp json/decode walk/keywordize-keys)]
+        (if (m/validate schema/persistent-info c)
+          (let [[_source data] (first (:data c))]
+            (sauce->booru data))
+          {:error :file-not-valid}))
+      {:error :file-not-exist})))

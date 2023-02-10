@@ -7,14 +7,14 @@
    [:map
     [:error :keyword]
     [:data {:optional true} :nil]
-    [:source :keyword]]))
+    [:source [:or :keyword :string]]]))
 
 (def sucess
   (m/schema
    [:map
     [:data :map]
     [:error {:optional true} :nil]
-    [:source :keyword]
+    [:source [:or :keyword :string]]
     [:extra {:optional true} :map]]))
 
 (def result

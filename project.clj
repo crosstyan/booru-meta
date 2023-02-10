@@ -28,6 +28,7 @@
                  ;; can't decide which one to use
                  ;; I'll take malli for now
                  [metosin/spec-tools "0.10.5"]
+                 [clojure.java-time "1.2.0"]
                  [org.clojure/spec.alpha "0.3.218"]]
   :profiles {:dev {:dependencies [[org.typedclojure/typed.clj.checker "1.0.32"]]}}
   :repl-options {:init-ns booru-meta.core}

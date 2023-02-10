@@ -21,48 +21,50 @@
             [hickory.core :as html]
             [hickory.select :as hs])
   (:use [booru-meta.utils]
-        [booru-meta.common]))
+        [booru-meta.common]
+        [clojure.core.async :only [go go-loop <! >! timeout chan]]))
 
 
 ;; https://github.com/kitUIN/PicImageSearch/blob/3c7f13cab5d49d38f6236f8f26f54a2e64d06175/PicImageSearch/saucenao.py#L27
 (defn sauce [file & {:keys [api-key min-sim]
                      :or {min-sim 0.8}}]
-  (let [body (read-compress-img file)
-        to-final' (fn [result]
-                    {:similarity (/ (Float/parseFloat (get-in result [:header :similarity])) 100)
-                     :link (get-in result [:data :ext_urls 0])
-                     :links (get-in result [:data :ext_urls])
-                     :author {:name (first (filter some?
-                                                   [(get-in result [:data :member_login_name])
-                                                    (get-in result [:data :creator])]))}
-                     :meta (:data result)})
-        to-final #(map to-final' %)
-        to-extra (fn [header]
-                   {:short-remaining (:short_remaining header)
-                    :long-remaining (:long_remaining header)
-                    :short-limit (:short_limit header)
-                    :long-limit (:long_limit header)})
-        ret (a/promise-chan)
-        url "https://saucenao.com/search.php"
-        source :saucenao
-        params {:output_type 2
-                :api_key api-key
-                :testmode 0}]
-    (assert (and (> min-sim 0) (< min-sim 1)) "min-sim should be between 0 and 1")
-    (if (some? api-key)
-      (client/post url {:async true :multipart [{:name "file" :content body}]
-                        :query-params params :as :json}
-                   (fn [response]
-                     (if-let [final
-                              (seq (filter #(>= (:similarity %) min-sim)
-                                           (to-final (get-in response [:body :results]))))]
-                       (a/>!! ret {:data {:final final}
-                                     :extra (to-extra (get-in response [:body :header]))
-                                     :source source})
-                       (a/>!! ret {:error :no-match :source source})))
-                   (fn [error] (deliver ret {:error error :source source})))
-      (a/>!! ret {:error :no-api-key}))
-    ret))
+  (go (let [body (if (byte-array? file) file
+                     (<! (image-thread (read-compress-img file)))) 
+            to-final' (fn [result]
+                        {:similarity (/ (Float/parseFloat (get-in result [:header :similarity])) 100)
+                         :link (get-in result [:data :ext_urls 0])
+                         :links (get-in result [:data :ext_urls])
+                         :author {:name (first (filter some?
+                                                       [(get-in result [:data :member_login_name])
+                                                        (get-in result [:data :creator])]))}
+                         :meta (:data result)})
+            to-final #(map to-final' %)
+            to-extra (fn [header]
+                       {:short-remaining (:short_remaining header)
+                        :long-remaining (:long_remaining header)
+                        :short-limit (:short_limit header)
+                        :long-limit (:long_limit header)})
+            ret (a/promise-chan)
+            url "https://saucenao.com/search.php"
+            source :saucenao
+            params {:output_type 2
+                    :api_key api-key
+                    :testmode 0}]
+        (assert (and (> min-sim 0) (< min-sim 1)) "min-sim should be between 0 and 1")
+        (if (some? api-key)
+          (client/post url {:async true :multipart [{:name "file" :content body}]
+                            :query-params params :as :json}
+                       (fn [response]
+                         (if-let [final
+                                  (seq (filter #(>= (:similarity %) min-sim)
+                                               (to-final (get-in response [:body :results]))))]
+                           (a/>!! ret {:data {:final final}
+                                       :extra (to-extra (get-in response [:body :header]))
+                                       :source source})
+                           (a/>!! ret {:error :no-match :source source})))
+                       (fn [error] (deliver ret {:error error :source source})))
+          (a/>!! ret {:error :no-api-key}))
+        (<! ret))))
 
 
 ;; iqdb will return a html page. Need to parse it.
@@ -92,23 +94,24 @@
   ([file] (iqdb file {}))
   ([file & {:keys [is-three-d min-sim user-agent]
             :or {is-three-d false min-sim 0.8 user-agent default-user-agent}}]
-   (let [body (read-compress-img file)
-         to-final (fn [d] {:similarity (:sim d)
-                           :link (:link d)
-                           :meta (:meta d)})
-         url (if is-three-d "https://3d.iqdb.org/" "https://iqdb.org/")
-         source :iqdb
-         ret (a/promise-chan)]
-     (assert (and (> min-sim 0) (< min-sim 1)) "min-sim should be between 0 and 1")
-     (client/post url {:async true :multipart [{:name "file" :content body}] :as :auto :headers {"User-Agent" user-agent}}
-                  (fn [response]
-                    (let [data (extract-iqdb-info (:body response))
-                          data (filter #(>= (:sim %) min-sim) data)]
-                      (a/>!! ret (if (seq data)
-                                     {:data {:final (map to-final data)} :source source}
-                                     {:error :no-match :source source}))))
-                  (fn [error] (a/>!! ret {:error error :source source})))
-     ret)))
+   (go (let [body (if (byte-array? file) file
+                      (<! (image-thread (read-compress-img file))))
+             to-final (fn [d] {:similarity (:sim d)
+                               :link (:link d)
+                               :meta (:meta d)})
+             url (if is-three-d "https://3d.iqdb.org/" "https://iqdb.org/")
+             source :iqdb
+             ret (a/promise-chan)]
+         (assert (and (> min-sim 0) (< min-sim 1)) "min-sim should be between 0 and 1")
+         (client/post url {:async true :multipart [{:name "file" :content body}] :as :auto :headers {"User-Agent" user-agent}}
+                      (fn [response]
+                        (let [data (extract-iqdb-info (:body response))
+                              data (filter #(>= (:sim %) min-sim) data)]
+                          (a/>!! ret (if (seq data)
+                                       {:data {:final (map to-final data)} :source source}
+                                       {:error :no-match :source source}))))
+                      (fn [error] (a/>!! ret {:error error :source source})))
+         (<! ret)))))
 
 
 (defn extract-ascii2d-info [raw-html-string]
@@ -131,26 +134,27 @@
   ([file] (ascii2d file {}))
   ([file & {:keys [is-bovw user-agent]
             :or {is-bovw false user-agent default-user-agent}}]
-   (let [body (read-compress-img file)
-         url "https://ascii2d.obfs.dev/"
-         append-url (fn [url path] (let [uri (java.net.URI/create url)]
-                                     (str (.resolve uri path))))
-         to-final (fn [d] {:link (get-in d [:work :link])
-                           :author (:author d)})
-         source :ascii2d
-         ret (a/promise-chan)]
-     (client/post (append-url url "/search/file")
-                  {:async true :multipart [{:name "file" :content body}] :as :auto :headers {"User-Agent" user-agent}}
-                  (fn [response]
-                    (let [new-url (get-in response [:headers "Location"])
-                          new-url (if is-bovw (s/replace-first new-url #"\/color\/" "/bovw/") new-url)]
-                      (if (some? new-url)
-                        (client/get new-url {:async true :as :auto :headers {"User-Agent" user-agent}}
-                                    (fn [response]
-                                      (if-let [data (seq (extract-ascii2d-info (:body response)))]
-                                        (deliver ret {:data {:final (map to-final data)} :source source})
-                                        (deliver ret {:error :no-match :source source})))
-                                    (fn [error] (deliver ret {:error error :source source})))
-                        (a/>!! ret {:error :no-match :source source}))))
-                  (fn [error] (a/>!! ret {:error error :source source})))
-     ret)))
+   (go (let [body (if (byte-array? file) file
+                      (<! (image-thread (read-compress-img file))))
+             url "https://ascii2d.obfs.dev/"
+             append-url (fn [url path] (let [uri (java.net.URI/create url)]
+                                         (str (.resolve uri path))))
+             to-final (fn [d] {:link (get-in d [:work :link])
+                               :author (:author d)})
+             source :ascii2d
+             ret (a/promise-chan)]
+         (client/post (append-url url "/search/file")
+                      {:async true :multipart [{:name "file" :content body}] :as :auto :headers {"User-Agent" user-agent}}
+                      (fn [response]
+                        (let [new-url (get-in response [:headers "Location"])
+                              new-url (if is-bovw (s/replace-first new-url #"\/color\/" "/bovw/") new-url)]
+                          (if (some? new-url)
+                            (client/get new-url {:async true :as :auto :headers {"User-Agent" user-agent}}
+                                        (fn [response]
+                                          (if-let [data (seq (extract-ascii2d-info (:body response)))]
+                                            (deliver ret {:data {:final (map to-final data)} :source source})
+                                            (deliver ret {:error :no-match :source source})))
+                                        (fn [error] (deliver ret {:error error :source source})))
+                            (a/>!! ret {:error :no-match :source source}))))
+                      (fn [error] (a/>!! ret {:error error :source source})))
+         (<! ret)))))

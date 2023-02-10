@@ -1,11 +1,15 @@
 (ns booru-meta.utils
   (:require [babashka.fs :as fs]
-            [clojure.java.io :as io]
-            [typed.clojure :as t]
-            [clojure.string :as s]
-            [mikera.image.core :as imagez]
             [bites.core]
-            [clojure.core.async :as a])
+            [booru-meta.schema :as schema]
+            [cheshire.core :as json]
+            [clojure.core.async :as a]
+            [clojure.java.io :as io]
+            [clojure.string :as s]
+            [clojure.walk :as walk]
+            [malli.core :as m]
+            [mikera.image.core :as imagez]
+            [typed.clojure :as t])
   (:import (java.nio.file FileSystems)
            org.apache.commons.codec.binary.Hex))
 
@@ -95,7 +99,6 @@
 ;; TODO: convert it to rgb then compresses it to jpeg
 ;; https://stackoverflow.com/questions/44182400/how-to-convert-bufferedimage-rgba-to-bufferedimage-rgb
 ;; https://github.com/mikera/imagez/issues/33
-;; TODO: make this function async (run in another thread)
 (defn read-compress-img
   "Read a file and compress it with its short side 512 to png format.
 
@@ -111,6 +114,14 @@
         bytes (.toByteArray buf)]
     (.close buf)
     bytes))
+
+(def ByteArray
+  "ByteArray is the class name of a byte array."
+  (class (byte-array [0x00 0xff])))
+
+(defn byte-array? [ba]
+  ;; create a byte array and get it type
+  (instance? ByteArray ba))
 
 (defn split-kv-string
   "Split string `s` by `:` whose key is start with captial letter 
@@ -196,3 +207,31 @@
 (def chan-type (type (a/chan)))
 (defn chan? [x]
   (instance? chan-type x))
+
+(defn filter-out-nomatch [file]
+  (not (fs/exists? (with-extension file ".nomatch.json"))))
+
+(defn filter-out-matched [file]
+  (not (fs/exists? (with-extension file ".json"))))
+
+
+(defn get-sauced-no-booru
+  "Give a json or picture"
+  [file]
+  (let [check (fn [file]
+                (let [c (-> file str slurp json/decode walk/keywordize-keys)]
+                  (if (m/validate schema/persistent-info c)
+                    (let [ks (keys (:data c))
+                          sauce [:sauce :iqdb :ascii2d]
+                          booru [:danbooru :gelbooru :sankaku :yandere]]
+                      (reduce #(and %1 %2) true (map (fn [k] (and (some #(= % k) sauce) (not-any? #(= % k) booru)))  ks)))
+                    false)))
+        json-file (with-extension file ".json")]
+    (if (fs/exists? json-file)
+      (check json-file)
+      false)))
+
+(defn filter-out-folders [file folders]
+  (let [parent (fs/parent file)
+        name (file->stem parent)]
+    (not (some #(= name %) folders))))
