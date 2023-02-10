@@ -7,7 +7,12 @@
                  [org.clj-commons/byte-streams "0.3.2"]
                  [babashka/fs "0.2.14"]
                  [org.typedclojure/typed.clj.runtime "1.0.32"]
-                 [com.google.guava/guava "31.1-jre"]
+                 [com.google.guava/guava "31.1-jre"
+                  :exclusions [org.slf4j/slf4j-api
+                               org.slf4j/slf4j-log4j12
+                               org.slf4j/slf4j-simple
+                               org.slf4j/slf4j-nop
+                               org.slf4j/slf4j-jdk14]]
                  [clj-http "3.12.3"]
                  [progrock "0.1.2"]
                  [org.clojure/data.json "2.4.0"]
@@ -24,6 +29,7 @@
                  [clojure-term-colors "0.1.0"]
                  [listora/again "1.0.0"]
                  [dev.brachtendorf/JImageHash "1.0.0"]
+                 [ch.qos.logback/logback-classic "1.4.5"]
                  [metosin/malli "0.10.1"]
                  ;; can't decide which one to use
                  ;; I'll take malli for now

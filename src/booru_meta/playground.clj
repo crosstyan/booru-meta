@@ -124,6 +124,7 @@ s3
 (def files (filter filter-out-nomatch files))
 (def ng-folders ["PVC" "orange@aigc" "kantoku@sketch" "wlop" "53928"])
 (def files (filter #(filter-out-folders % ng-folders) files))
+(count files)
 
 
 (def files (filter get-sauced-no-booru files))

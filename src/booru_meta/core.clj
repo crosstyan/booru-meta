@@ -30,13 +30,13 @@
    `on-error` would be called with the error."
   [f & {:keys [on-error] :or {on-error (constantly nil)}}]
   (go-loop [chan (f)
-            retry [500 1000 3000]]
+            [retry remain] [500 1000 3000]]
     (let [res (if (chan? chan) (<! chan) chan)]
       (if-let [error (:error res)]
-        (if (and (some? (first retry)) (not (keyword? error)))
-          (do (<! (timeout (first retry)))
-              (on-error error)
-              (recur (f) (rest retry)))
+        (if (and (some? retry) (not (keyword? error)))
+          (do (<! (timeout retry))
+              (on-error error retry remain)
+              (recur (f) remain))
           res)
         res))))
 
@@ -83,14 +83,15 @@
   (go-loop [[func & rest-fns] fns
             resps []]
     (if (fn? func)
-      (let [res (<! (retry-when-error #(apply func args) :on-error #(log/error %)))
+      (let [res (<! (retry-when-error #(apply func args)
+                                      :on-error (fn [error retry remain] (log/error "Error" error "Retry" retry "Remain" remain))))
             data (:data res)]
         (if (some? data) (conj resps res)
             (recur rest-fns (conj resps res))))
       resps)))
 
 (defn query-booru [args]
-  (loop-query [booru/danbooru booru/sankaku] args))
+  (loop-query (shuffle [booru/danbooru booru/sankaku]) args))
 
 
 (defn query-sauce [args]
