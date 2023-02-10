@@ -116,14 +116,20 @@ s3
 (defn filter-out-matched [file]
   (not (fs/exists? (with-extension file ".json"))))
 
+(def files (:md5 (categorize-by-md5 (filter filter-out-matched (shuffle (glob (io/file "C:\\Users\\cross\\Desktop\\mt_o\\Artists\\") image-glob-pattern))))))
+
+;; files io/compress files/calculate md5 must be done in a separate thread
+files
+(count files)
+
 (def cancel
-  (let [file-list (filter filter-out-matched (shuffle (glob (io/file "C:\\Users\\cross\\Desktop\\mt_o\\ArtistsNoEmb\\") image-glob-pattern)))
+  (let [file-list files
         {cancel :cancel failed-chan :failed-chan bar-chan :bar-chan}
         (run-batch file-list query-by-md5-then-save
                    :max-limit 30
                    :reset-interval-ms 25000
                    :root-path "C:\\Users\\cross\\Desktop\\mt_o\\"
-                   :random-delay-ms [100 200])]
+                   :random-delay-ms [300 1000])]
     (a/go-loop []
       (pr/print (a/<! bar-chan))
       (recur))
@@ -134,3 +140,5 @@ s3
            (a/close! failed-chan)))))
 
 (cancel)
+
+(take 1000 (filter filter-out-matched (shuffle (fs/glob (io/file "C:\\Users\\cross\\Desktop\\mt_o\\Artists\\") image-glob-pattern))))

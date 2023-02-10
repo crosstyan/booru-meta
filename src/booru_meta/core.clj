@@ -192,7 +192,7 @@
           (if (seq sauce-sucess)
             (let [maybe-fns (map booru/sauce->booru (vals sauce-sucess))
                   fns (filter fn? maybe-fns)
-                  chans (map #(let [res (%)] res) fns)
+                  chans (map #(let [res (retry-when-error %)] res) fns)
                   ;; how do I use map to get the result from channel?
                   rs (a/go-loop [[c cs] chans
                                  resps []]
@@ -228,11 +228,11 @@
          random-delay-ms [0 100]}}]
   (let [short-limit (atom 0)
         reset-limit #(reset! % 0)
-        cancel (interval reset-limit [short-limit] reset-interval-ms)
+        ;; cancel (interval reset-limit [short-limit] reset-interval-ms)
         flag (atom true)
-        failed-chan (a/chan 20)
+        failed-chan (a/chan 4096)
         bar (atom (pr/progress-bar (count file-list)))
-        bar-chan (a/chan 10)
+        bar-chan (a/chan 4096)
         action (fn [file]
                  (a/go (let [_ (a/<! (handler file :root-path root-path :failed-chan failed-chan))]
                          (swap! bar pr/tick)
@@ -241,14 +241,10 @@
     (doseq [file file-list]
       ;; skip when json file exists
       (a/go-loop []
-        (when @flag
-          (if (>= @short-limit max-limit)
-            (do (a/<! (a/timeout 500)) (recur))
-            (do (a/<! (a/timeout (apply rand-int-range random-delay-ms)))
-                (swap! short-limit inc)
-                (action file))))))
-    {:cancel #(do (cancel)
-                  (reset! flag false))
+        (do (a/<! (a/timeout (apply rand-int-range random-delay-ms)))
+            (swap! short-limit inc)
+            (action file))))
+    {:cancel #(do (reset! flag false))
      :bar-chan bar-chan
      :failed-chan failed-chan}))
 
