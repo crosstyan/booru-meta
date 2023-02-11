@@ -51,9 +51,9 @@
   }
 ```
    "
-  [& {:keys [url user-agent param preprocess name] 
-      :or {user-agent default-user-agent}}]
-  (let [header {"User-Agent" user-agent}
+  [& {:keys [url user-agent param preprocess name extra-header] 
+      :or {user-agent default-user-agent extra-header {}}}]
+  (let [header (merge {"User-Agent" user-agent} extra-header) 
         ret (a/promise-chan)]
     (client/get url (merge proxy-options
                            {:headers header :content-type :json :as :json :query-params param :async true}) 
@@ -104,7 +104,7 @@
 (defn sankaku
   ([postid-or-md5] (sankaku postid-or-md5 {}))
   ([query &
-    {:keys [is-custom] :or {is-custom false}}]
+    {:keys [is-custom token] :or {is-custom false token nil}}]
    (let [q (mk-query query is-custom)
          preprocess
          (fn [content]
@@ -135,7 +135,9 @@
                    {:name :sankaku
                     :url "https://capi-v2.sankakucomplex.com/posts/keyset"
                     :param {:tags %}
-                    :preprocess preprocess})]
+                    :preprocess preprocess
+                    :extra-header (if (some? token) 
+                                    {"Authorization" (str "Bearer " token)} {}) })]
      (if q
        (get-metadata (mk-opt q))
        {:error :invalid-query :query q}))))

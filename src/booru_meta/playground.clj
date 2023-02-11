@@ -3,6 +3,7 @@
             [bites.core]
             [booru-meta.sauce :as sauce]
             [booru-meta.schema :as schema]
+            [clj-http.client :as client]
             [clojure.core.async :as a]
             [clojure.java.io :as io]
             [clojure.walk :as walk]
@@ -13,6 +14,7 @@
             [booru-meta.booru :as booru])
   (:use [booru-meta.utils]
         [booru-meta.sauce]
+        [booru-meta.common]
         [booru-meta.booru]
         [booru-meta.core]))
 
@@ -159,7 +161,7 @@ files
   (let [file-list files
         {cancel :cancel failed-chan :failed-chan bar-chan :bar-chan}
         (run-batch file-list query-by-md5-then-save
-                   :max-limit 6
+                   :max-limit 5
                    :reset-interval-ms 10000
                    :root-path root
                    :random-delay-ms [500 1000])
@@ -201,3 +203,24 @@ files
 
 (doseq [file filtered]
   (fs/delete-if-exists file))
+
+
+;; authType: "password_json",
+;; tokenUrl: "https://capi-v2.sankakucomplex.com/auth/token",
+;; https://github.com/Bionus/imgbrd-grabber/blob/8827ed10a714dde51f063f5e1b12efcf73f7a007/src/lib/src/login/oauth2-login.cpp#L77
+;; https://github.com/radjah/booru-rippers/blob/d3d16af14525de5c26d9e5b4630eeb958f1d1018/get.sankaku.sh#L47
+(def token-resp
+  (client/post "https://capi-v2.sankakucomplex.com/auth/token"
+               (merge proxy-options
+                      {:content-type :json
+                       :headers {"Accept" "application/vnd.sankaku.api+json;v=2"
+                                 "User-Agent" default-user-agent}
+                       :as :json
+                       :form-params {:login "name"
+                                     :password "pass"}})))
+
+;; Bearer
+(def token (get-in token-resp [:body :access_token]))
+token
+
+

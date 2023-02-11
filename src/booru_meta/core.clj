@@ -39,7 +39,7 @@
           (do (<! (timeout delay))
               (on-error {:error error :retry delay :remain remain})
               (recur (f) remain))
-          res)
+          (assoc res :error :retry-failed))
         res))))
 
 ;; interface
@@ -96,8 +96,10 @@
             (recur rest-fns (conj resps res))))
       resps)))
 
+(def token
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOjE0MTY3OCwic3ViTHZsIjoxMCwiaXNzIjoiaHR0cHM6Ly9jYXBpLXYyLnNhbmtha3Vjb21wbGV4LmNvbSIsInR5cGUiOiJCZWFyZXIiLCJhdWQiOiJjb21wbGV4Iiwic2NvcGUiOiJjb21wbGV4IiwiaWF0IjoxNjc2MTMzODg1LCJleHAiOjE2NzYzMDY2ODV9.Vy6t9S7ovCpkNVOYbes0SfX8Kgu3s0gCH1DhjfONyGA")
 (defn query-booru [args]
-  (loop-query (shuffle [booru/danbooru booru/sankaku]) args))
+  (loop-query (shuffle [booru/danbooru #(booru/sankaku % :token token)]) args))
 
 
 (defn query-sauce [args]
