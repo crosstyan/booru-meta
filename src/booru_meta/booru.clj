@@ -197,10 +197,10 @@
   (if (m/validate schema/sauce-result result)
     (let [f (get-in result [:data :final])
           l (map #(if (empty? (:links %)) (:link %) (:links %)) f)
-          l' (map link->source (flatten l)) 
+          l' (map link->source (flatten l))
           l'' (filter some? l')
-          ;; I assume the result is sorted
-          r (first l'')
+          l''' (sort-by-booru l'')
+          r (first l''')
           s (:source r)
           id (:id r)]
       (if (some? id)

@@ -235,3 +235,18 @@
   (let [parent (fs/parent file)
         name (file->stem parent)]
     (not (some #(= name %) folders))))
+
+;; https://clojuredocs.org/clojure.core/juxt
+(def booru-priority
+  {:danbooru 1
+   :sankaku 2
+   :pixiv 3
+  ;;  :gelbooru ?
+   :yandere 4})
+
+(defn sort-by-booru 
+"source list is like `[{:source :danbooru} {:source :sankaku}]`"
+  [source-list]
+  (sort-by #(get booru-priority (:source %) 99) source-list))
+
+;; (sort-by-booru [{:source :yandere :link nil} {:source :sankaku} {:source :pixiv} {:source :gelbooru} {:source :danbooru} ])

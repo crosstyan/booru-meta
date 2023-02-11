@@ -16,7 +16,7 @@
             [clojure.walk :as walk])
   (:use [booru-meta.utils]
         [booru-meta.common]
-        [clojure.core.async :only [go go-loop <! >! timeout chan]])
+        [clojure.core.async :only [go go-loop <! <!! >! timeout chan]])
   (:gen-class))
 
 ;; https://stackoverflow.com/questions/6694530/executing-a-function-with-a-timeout
@@ -30,12 +30,12 @@
    `on-error` would be called with the error."
   [f & {:keys [on-error] :or {on-error (constantly nil)}}]
   (go-loop [chan (f)
-            [retry remain] [500 1000 3000]]
+            [retry & remain] [500 1000 3000]]
     (let [res (if (chan? chan) (<! chan) chan)]
       (if-let [error (:error res)]
         (if (and (some? retry) (not (keyword? error)))
           (do (<! (timeout retry))
-              (on-error error retry remain)
+              (on-error {:error error :retry retry :remain remain})
               (recur (f) remain))
           res)
         res))))
@@ -83,8 +83,12 @@
   (go-loop [[func & rest-fns] fns
             resps []]
     (if (fn? func)
-      (let [res (<! (retry-when-error #(apply func args)
-                                      :on-error (fn [error retry remain] (log/error "Error" error "Retry" retry "Remain" remain))))
+      (let [on-error
+            (fn [{error :error retry :retry remain :remain}]
+              (log/error {:error (:cause (Throwable->map error))
+                          :retry retry :remain remain}))
+            res (<! (retry-when-error #(apply func args)
+                                      :on-error on-error))
             data (:data res)]
         (if (some? data) (conj resps res)
             (recur rest-fns (conj resps res))))
@@ -260,15 +264,16 @@
                        (swap! bar pr/tick)
                        (a/put! bar-chan @bar))))]
     (assert (fn? handler) "handler should be a function")
-    (doseq [file file-list]
-      ;; skip when json file exists
-      (go-loop []
-        (when @flag
-          (if (>= @short-limit max-limit)
-            (do (<! (a/timeout 500)) (recur))
-            (do (<! (timeout (apply rand-int-range random-delay-ms)))
-                (swap! short-limit inc)
-                (action file))))))
+    ;; don't block the main repl thread
+    (a/thread
+      (doseq [file file-list]
+        (loop []
+          (when @flag
+            (if (>= @short-limit max-limit)
+              (do (<!! (a/timeout 500)) (recur))
+              (do (<!! (timeout (apply rand-int-range random-delay-ms)))
+                  (swap! short-limit inc)
+                  (action file)))))))
     {:cancel #(do (cancel)
                   (reset! flag false))
      :bar-chan bar-chan
