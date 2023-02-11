@@ -30,10 +30,10 @@
              [:rating :string] ;; g/s/e general/sensitive/explicit (or safe?)
              [:md5 :string]
              [:general [:sequential :string]]
-             [:artist [:sequential :string]]
-             [:copyright [:sequential :string]]
-             [:character [:sequential :string]]
-             [:meta [:sequential :string]]]))
+             [:artist {:optional true} [:sequential :string]]
+             [:copyright {:optional true} [:sequential :string]]
+             [:character {:optional true} [:sequential :string]]
+             [:meta {:optional true} [:sequential :string]]]))
 
 (def booru-data-schema
   "Schema for the `:data` field in the result from `booru`."
