@@ -247,8 +247,8 @@
 `run-batch`."
   [failed-chan]
   (let [bar-chan (chan 1024)
-        bar (atom (pr/progress-bar (.count (.buf failed-chan))))
-        file-set (atom #{})]
+        bar_ (atom (pr/progress-bar (.count (.buf failed-chan))))
+        file-set_ (atom #{})]
     (go-loop []
       (let [file (<! failed-chan)]
         ;; once at a time, don't hurry.
@@ -256,10 +256,10 @@
           (<! (query-by-file-then-save file)))
         (let [buf (.buf failed-chan)
               chan-set (set buf)]
-          (swap! file-set #(cljset/union % chan-set))
-          (swap! bar #(assoc % :total (count @file-set)))
-          (swap! bar pr/tick)
-          (a/put! bar-chan @bar))
+          (swap! file-set_ #(cljset/union % chan-set))
+          (swap! bar_ #(assoc % :total (count @file-set_)))
+          (swap! bar_ pr/tick)
+          (a/put! bar-chan @bar_))
         (recur)))
     {:bar-chan bar-chan}))
 
@@ -271,30 +271,30 @@
          reset-interval-ms 30000
          root-path nil
          random-delay-ms [0 100]}}]
-  (let [short-limit (atom 0)
+  (let [short-limit_ (atom 0)
         reset-limit #(reset! % 0)
-        cancel (interval reset-limit [short-limit] reset-interval-ms)
-        flag (atom true)
+        cancel (interval reset-limit [short-limit_] reset-interval-ms)
+        flag_ (atom true)
         failed-chan (chan 4096)
-        bar (atom (pr/progress-bar (count file-list)))
+        bar_ (atom (pr/progress-bar (count file-list)))
         bar-chan (chan 4096)
         action (fn [file]
                  (go (let [_ (<! (handler file :root-path root-path :failed-chan failed-chan))]
-                       (swap! bar pr/tick)
-                       (a/put! bar-chan @bar))))]
+                       (swap! bar_ pr/tick)
+                       (a/put! bar-chan @bar_))))]
     (assert (fn? handler) "handler should be a function")
     ;; don't block the main repl thread
     (a/thread
       (doseq [file file-list]
         (loop []
-          (when @flag
-            (if (>= @short-limit max-limit)
+          (when @flag_
+            (if (>= @short-limit_ max-limit)
               (do (<!! (a/timeout 500)) (recur))
               (do (<!! (timeout (apply rand-int-range random-delay-ms)))
-                  (swap! short-limit inc)
+                  (swap! short-limit_ inc)
                   (action file)))))))
     {:cancel #(do (cancel)
-                  (reset! flag false)
+                  (reset! flag_ false)
                   (a/close! failed-chan)
                   (a/close! bar-chan))
      :bar-chan bar-chan
