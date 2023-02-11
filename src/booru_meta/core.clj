@@ -113,21 +113,16 @@
     (do (log/warn "Invalid result" resps)
         {})))
 
-(defn mk-persistent-template [file & {:keys [root-path] :or {root-path nil}}]
+(defn mk-persistent-template 
+"calc md5 is quite slow
+
+ CPU bound task should be NOT done in `go` block."
+  [file & {:keys [root-path] :or {root-path nil}}]
   (let [path (mk-path file root-path)]
     {:data {}
      :md5 ((comp bytes->string calc-md5) file)
      :path path
      :version "0.1"}))
-
-(defn async-mk-persistent-template [file & {:keys [root-path] :or {root-path nil}}]
-  (go (let [path (mk-path file root-path)
-            md5 (<! (a/thread (calc-md5 file)))]
-        {:data {}
-         :md5 md5
-         :path path
-         :version "0.1"})))
-
 
 ;; https://stackoverflow.com/questions/2753874/how-to-filter-a-persistent-map-in-clojure
 ;; https://stackoverflow.com/questions/28408743/how-do-you-destructure-a-map-into-key-value-pairs-without-knowing-the-keys-in-cl
@@ -173,7 +168,8 @@
             merged (if (some? last-data)
                      (merge-categorized-results results :last-data last-data :last-nomatch last-nomatch)
                      (merge-categorized-results results
-                                                :data-template (<! (async-mk-persistent-template file :root-path root-path))
+                                                :data-template 
+                                                (<! (a/thread (mk-persistent-template file :root-path root-path)))
                                                 :last-nomatch last-nomatch))]
         (<! (a/thread (save-aux-json file merged))))))
 
