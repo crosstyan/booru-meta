@@ -114,8 +114,7 @@
         {})))
 
 (defn mk-persistent-template 
-"calc md5 is quite slow
-
+"calc md5 is quite slow.
  CPU bound task should be NOT done in `go` block."
   [file & {:keys [root-path] :or {root-path nil}}]
   (let [path (mk-path file root-path)]
@@ -163,15 +162,17 @@
       (spit (str nomatch-path)  (json/encode error)))
     nil))
 
-(defn async-save-results [file results & {:keys [root-path] :or {root-path nil}}]
-  (go (let [{last-data :data last-nomatch :error} (read-aux-json file)
+(defn save-results 
+"Side effect: READ and SAVE results to file. SHOULD NOT be called in `go` block."
+  [file results & {:keys [root-path] :or {root-path nil}}]
+  (let [{last-data :data last-nomatch :error} (read-aux-json file)
             merged (if (some? last-data)
                      (merge-categorized-results results :last-data last-data :last-nomatch last-nomatch)
                      (merge-categorized-results results
-                                                :data-template 
-                                                (<! (a/thread (mk-persistent-template file :root-path root-path)))
+                                                :data-template
+                                                (mk-persistent-template file :root-path root-path)
                                                 :last-nomatch last-nomatch))]
-        (<! (a/thread (save-aux-json file merged))))))
+        (save-aux-json file merged)))
 
 (defn query-by-md5-then-save
   "Return a channel that will send result
@@ -190,7 +191,7 @@
             results (-> query query-booru <! categorize-results)]
         (when (and (chan? failed-chan) (empty? (:data results)))
           (a/put! failed-chan file))
-        (<! (async-save-results file results :root-path root-path))
+        (<! (a/thread (save-results file results :root-path root-path)))
         results)))
 
 ;; TODO: fix no match is not saved.
@@ -221,10 +222,11 @@
                 (categorize-results (<! rs))
                 results {:data (merge sauce-sucess booru-sucess)
                          :error (merge sauce-error booru-error)}]
-            (do (<! (async-save-results file results :root-path root-path))
+            #_{:clj-kondo/ignore [:redundant-do]}
+            (do (<! (a/thread (save-results file results :root-path root-path)))
                 (put-fail file)
                 results))
-          (do (<! (async-save-results file sauce-results :root-path root-path))
+          (do (<! (a/thread (save-results file sauce-results :root-path root-path)))
               (put-fail file)
               sauce-results)))))
 
@@ -234,7 +236,7 @@
   (go (let [chan (func)
             booru-result (<! chan)
             booru-result (categorize-results [booru-result])]
-        (<! (async-save-results file booru-result :root-path root-path))
+        (<! (a/thread (save-results file booru-result :root-path root-path)))
         booru-result)))
 
 (defn query-sauce-for-fails
