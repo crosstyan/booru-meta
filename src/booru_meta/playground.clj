@@ -158,18 +158,21 @@ files
   (let [file-list files
         {cancel :cancel failed-chan :failed-chan bar-chan :bar-chan}
         (run-batch file-list query-by-md5-then-save
-                   :max-limit 5
+                   :max-limit 6
                    :reset-interval-ms 10000
                    :root-path "C:\\Users\\cross\\Desktop\\mt_o\\"
-                   :random-delay-ms [500 1000])]
+                   :random-delay-ms [500 1000])
+        {failed-bar-chan :bar-chan}
+        (query-sauce-for-fails failed-chan)]
     (a/go-loop []
-      (pr/print (a/<! bar-chan))
+      (a/alt! [bar-chan failed-bar-chan]
+              ([val _chan] (pr/print val)))
       (recur))
-    (query-sauce-for-fails failed-chan)
     #(do (cancel)
          (a/close! bar-chan)
          (when (chan? failed-chan)
            (a/close! failed-chan)))))
+
 
 (cancel)
 

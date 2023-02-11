@@ -201,9 +201,12 @@
   "Return a channel that will send result
 
    query sauce by file. save result to json file."
-  [file & {:keys [root-path]
+  [file & {:keys [root-path failed-chan]
            :or {root-path nil}}]
-  (go (let [compressed (<! (image-thread (read-compress-img file)))
+  (go (let [put-fail (fn [results]
+                       (when (and (chan? failed-chan) (empty? (:data results)))
+                         (a/put! failed-chan file)))
+            compressed (<! (image-thread (read-compress-img file)))
             sauce-results  (-> compressed query-sauce <!  categorize-results)
             {sauce-sucess :data sauce-error :error} sauce-results]
         (if (seq sauce-sucess)
@@ -222,8 +225,10 @@
                 results {:data (merge sauce-sucess booru-sucess)
                          :error (merge sauce-error booru-error)}]
             (do (<! (async-save-results file results :root-path root-path))
+                (put-fail file)
                 results))
           (do (<! (async-save-results file sauce-results :root-path root-path))
+              (put-fail file)
               sauce-results)))))
 
 (defn query-sauce-2-booru-then-save
@@ -236,13 +241,22 @@
         booru-result)))
 
 (defn query-sauce-for-fails
+;; https://stackoverflow.com/questions/41066630/how-to-get-the-buffer-size-of-a-channel-from-clojure-core-async
   "query sauce for failed files. Use with `query-by-md5-then-save` and
 `run-batch`."
   [failed-chan]
-  (go-loop []
-    (let [file (<! failed-chan)]
-      (<! (query-by-file-then-save file))
-      (recur))))
+  (let [bar-chan (chan 1024)
+        bar (atom (pr/progress-bar (.count (.buf failed-chan))))]
+    (go-loop []
+      (let [file (<! failed-chan)]
+        ;; once at a time, don't hurry.
+        (when (some? file)
+          (<! (query-by-file-then-save file)))
+        (swap! bar #(assoc % :total (.count (.buf failed-chan))))
+        (swap! bar pr/tick)
+        (a/put! bar-chan @bar)
+        (recur)))
+    {:bar-chan bar-chan}))
 
 (defn run-batch
   "`handler` should return a channel."
@@ -275,7 +289,9 @@
                   (swap! short-limit inc)
                   (action file)))))))
     {:cancel #(do (cancel)
-                  (reset! flag false))
+                  (reset! flag false)
+                  (a/close! failed-chan)
+                  (a/close! bar-chan))
      :bar-chan bar-chan
      :failed-chan failed-chan}))
 
