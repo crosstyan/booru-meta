@@ -6,6 +6,7 @@
             [clojure.core.async :as a]
             [clojure.java.io :as io]
             [clojure.string :as s]
+            [clojure.set :as cljset]
             [clojure.term.colors :as tc]
             [clojure.tools.cli :refer [parse-opts]]
             [malli.core :as m]
@@ -246,15 +247,19 @@
 `run-batch`."
   [failed-chan]
   (let [bar-chan (chan 1024)
-        bar (atom (pr/progress-bar (.count (.buf failed-chan))))]
+        bar (atom (pr/progress-bar (.count (.buf failed-chan))))
+        file-set (atom #{})]
     (go-loop []
       (let [file (<! failed-chan)]
         ;; once at a time, don't hurry.
         (when (some? file)
           (<! (query-by-file-then-save file)))
-        (swap! bar #(assoc % :total (.count (.buf failed-chan))))
-        (swap! bar pr/tick)
-        (a/put! bar-chan @bar)
+        (let [buf (.buf failed-chan)
+              chan-set (set buf)]
+          (swap! file-set #(cljset/union % chan-set))
+          (swap! bar #(assoc % :total (count @file-set)))
+          (swap! bar pr/tick)
+          (a/put! bar-chan @bar))
         (recur)))
     {:bar-chan bar-chan}))
 
