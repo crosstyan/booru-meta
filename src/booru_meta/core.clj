@@ -247,18 +247,15 @@
 `run-batch`."
   [failed-chan]
   (let [bar-chan (chan 1024)
-        bar_ (atom (pr/progress-bar (.count (.buf failed-chan))))
-        file-set_ (atom #{})]
+        bar_ (atom (pr/progress-bar (.count (.buf failed-chan))))]
     (go-loop []
       (let [file (<! failed-chan)]
         ;; once at a time, don't hurry.
         (when (some? file)
           (<! (query-by-file-then-save file)))
-        (let [buf (.buf failed-chan)
-              chan-set (set buf)]
-          (swap! file-set_ #(cljset/union % chan-set))
-          (swap! bar_ #(assoc % :total (count @file-set_)))
+        (let [buf (.buf failed-chan)]
           (swap! bar_ pr/tick)
+          (swap! bar_ #(assoc % :total (+ (.count buf) (:progress @bar_))))
           (a/put! bar-chan @bar_))
         (recur)))
     {:bar-chan bar-chan}))
