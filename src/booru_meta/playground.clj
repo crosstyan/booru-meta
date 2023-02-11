@@ -102,7 +102,8 @@ s3
   (let [file "C:\\Users\\cross\\Desktop\\mt_o\\Artists\\luicent\\4043c08ebed607e621b82ec7fdb49413.json"]
     (-> file str slurp json/decode walk/keywordize-keys)))
 
-(def files (let [files (:md5 (categorize-by-md5 (shuffle (glob (io/file "C:\\Users\\cross\\Desktop\\mt_o\\Artists") image-glob-pattern))))
+(def root "D:\\Grabber")
+(def files (let [files (:md5 (categorize-by-md5 (shuffle (glob (io/file root) image-glob-pattern))))
                  files (filter filter-out-matched files)
                  files (filter filter-out-nomatch files)
                  ng-folders ["PVC" "orange@aigc" "kantoku@sketch" "wlop" "53928"]
@@ -160,7 +161,7 @@ files
         (run-batch file-list query-by-md5-then-save
                    :max-limit 6
                    :reset-interval-ms 10000
-                   :root-path "C:\\Users\\cross\\Desktop\\mt_o\\"
+                   :root-path root
                    :random-delay-ms [500 1000])
         {failed-bar-chan :bar-chan}
         (query-sauce-for-fails failed-chan)]

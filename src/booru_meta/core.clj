@@ -31,12 +31,13 @@
    `on-error` would be called with the error."
   [f & {:keys [on-error] :or {on-error (constantly nil)}}]
   (go-loop [chan (f)
-            [retry & remain] [500 1000 3000]]
-    (let [res (if (chan? chan) (<! chan) chan)]
+            [retry & remain] [[500 1000] [1000 3000] [3000 9000]]]
+    (let [res (if (chan? chan) (<! chan) chan)
+          delay (if (some? retry) (apply rand-int-range retry) nil) ]
       (if-let [error (:error res)]
-        (if (and (some? retry) (not (keyword? error)))
-          (do (<! (timeout retry))
-              (on-error {:error error :retry retry :remain remain})
+        (if (and (some? delay) (not (keyword? error)))
+          (do (<! (timeout delay))
+              (on-error {:error error :retry delay :remain remain})
               (recur (f) remain))
           res)
         res))))
