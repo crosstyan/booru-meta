@@ -80,7 +80,7 @@
                          :md5 (:md5 original)
                          :general (split (:tag_string_general original))
                          :artist (split (:tag_string_artist original))
-                         :copyright (split (:tag_string_copytright original))
+                         :copyright (split (:tag_string_copyright original))
                          :character (split (:tag_string_character original))
                          :meta (split (:tag_string_meta original))}}}
                {:error :no-match})))

@@ -14,6 +14,7 @@
             [progrock.core :as pr]
             [booru-meta.sauce :as sauce]
             [again.core :as again]
+            [clojure.repl :as repl]
             [clojure.walk :as walk])
   (:use [booru-meta.utils]
         [booru-meta.common]
@@ -87,7 +88,9 @@
     (if (fn? func)
       (let [on-error
             (fn [{error :error retry :retry remain :remain}]
-              (log/error {:error (:cause (Throwable->map error))
+              ;; https://stackoverflow.com/questions/22116257/how-to-get-functions-name-as-string-in-clojure
+              (log/error {:fn (repl/demunge (str func))
+                          :error (:cause (Throwable->map error))
                           :retry retry :remain remain}))
             res (<! (retry-when-error #(apply func args)
                                       :on-error on-error))
